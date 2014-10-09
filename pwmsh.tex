@@ -34,7 +34,7 @@
 \mainmatter  % start of an individual contribution
 
 % first the title is needed
-\title{Programming with Monadic State Hierarchies}
+\title{Object-Oriented Programming with\\Monadic State Hierarchies}
 
 % a short form should be given in case it is too long for the running head
 %\titlerunning{Programming with monadic state hierarchies}
@@ -67,13 +67,62 @@
 
 
 \begin{abstract}
-In this paper we present a pure, Haskell encoding of an object-system supporting most conventional features of object-oriented languages, including object classes, inheritance, subtype polymorphism, and dynamic dispatch. We show a correspondence between inheritance and monad transformers by defining a state monad transformer for each class, parametrised only over the class' own state. The methods of a class are monadic computations which run on top of a stack of monad transformers, consisting of one layer for the class and each of its ancestors. The well-known limitation that functions must be ``lifted'' into the right place within a monad stack is overcome using dynamic dispatch. This encoding allows class hierarchies to be open, therefore allowing the construction of modular programs. 
+We present an encoding of an object system in pure Haskell supporting most conventional features of object-oriented languages, including object classes, inheritance, subtype polymorphism, and dynamic dispatch. We show a correspondence between inheritance and monad transformers by defining a state monad transformer for each class, parametrised only over the class's own state. The methods of a class are monadic computations which run on top of a stack of monad transformers, consisting of one layer for the class and each of its ancestors. The well-known limitation that functions must be ``lifted'' into the right place within a monad stack is overcome using dynamic dispatch. This encoding allows class hierarchies to be open for extension in separately-compiled modules, therefore allowing the construction of modular programs. 
 
 \keywords{Haskell, Monad Transformers, Object-Oriented Programming}
+
+========
+
+We present an encoding of (imperative, class-based) objects in pure Haskell
+supporting most conventional features of object-oriented languages,
+including object classes, inheritance, subtype polymorphism, and dynamic
+dispatch.
+[what's object classes?  does class-based above express the same idea?]
+[do we say "but not aliasing"?]
+We show a correspondence between inheritance and monad
+transformers by defining a state monad transformer for each class,
+parametrised only over the class's own state.
+[These sentence seems to say two things: "a new connection", and "how we
+use it"].
+The methods of a class are
+monadic computations which run on top of a stack of monad transformers,
+consisting of one layer for the class and each of its ancestors.
+The well-known monad-transformer limitation that functions must be `lifted'
+into the right
+place within a monad stack is overcome using dynamic dispatch.
+[... and this is appropriate for OO?]
 \end{abstract}
 
 
 \section{Introduction}
+
+Our contributions are:
+\begin{itemize}
+\item An encoding of...
+\item Is open
+\item Circumvents the need for ``lifting''
+\end{itemize}
+
+\section{Using the Encoding}
+
+\section{Encoding}
+
+\section{Casts}
+
+\section{Auto-generation}
+
+\section{Related Work}
+
+\begin{itemize}
+\item Haskell's hidden object system
+\item open data types and open functions
+\item data types a la carte
+\item extensible effects, etc.
+\end{itemize}
+
+\section{Conclusion and Future Work}
+
+extend to other monads
 
 
 \section{Paper Preparation}
@@ -268,22 +317,6 @@ subsubsection heading and should not be assigned a number.
 
 \section{The References Section}\label{references}
 
-In order to permit cross referencing within LNCS-Online, and eventually
-between different publishers and their online databases, LNCS will,
-from now on, be standardizing the format of the references. This new
-feature will increase the visibility of publications and facilitate
-academic research considerably. Please base your references on the
-examples below. References that don't adhere to this style will be
-reformatted by Springer. You should therefore check your references
-thoroughly when you receive the final pdf of your paper.
-The reference section must be complete. You may not omit references.
-Instructions as to where to find a fuller version of the references are
-not permissible.
-
-We only accept references written using the latin alphabet. If the title
-of the book you are referring to is in Russian or Chinese, then please write
-(in Russian) or (in Chinese) at the end of the transcript or translation
-of the title.
 
 The following section shows a sample reference list with entries for
 journal articles \cite{jour}, an LNCS chapter \cite{lncschap}, a book
@@ -317,16 +350,6 @@ Integration. Technical report, Global Grid Forum (2002)
 \bibitem{url} National Center for Biotechnology Information, \url{http://www.ncbi.nlm.nih.gov}
 
 \end{thebibliography}
-
-
-\section*{Appendix: Springer-Author Discount}
-
-LNCS authors are entitled to a 33.3\% discount off all Springer
-publications. Before placing an order, the author should send an email, 
-giving full details of his or her Springer publication,
-to \url{orders-HD-individuals@springer.com} to obtain a so-called token. This token is a
-number, which must be entered when placing an order via the Internet, in
-order to obtain the discount.
 
 \section{Checklist of Items to be Sent to Volume Editors}
 Here is a checklist of everything the volume editor requires from you:
