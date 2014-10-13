@@ -22,6 +22,9 @@
 \setcounter{tocdepth}{3}
 \usepackage{graphicx}
 
+\usepackage{xcolor}
+\newcommand{\todo}[1]{[{\color{blue}#1}]}
+
 \usepackage{url}
 \urldef{\mailsa}\path|{alfred.hofmann, ursula.barth, ingrid.haas, frank.holzwarth,|
 \urldef{\mailsb}\path|anna.kramer, leonie.kunz, christine.reiss, nicole.sator,|
@@ -70,48 +73,112 @@
 We present an encoding of an object system in pure Haskell supporting most conventional features of object-oriented languages, including object classes, inheritance, subtype polymorphism, and dynamic dispatch. We show a correspondence between inheritance and monad transformers by defining a state monad transformer for each class, parametrised only over the class's own state. The methods of a class are monadic computations which run on top of a stack of monad transformers, consisting of one layer for the class and each of its ancestors. The well-known limitation that functions must be ``lifted'' into the right place within a monad stack is overcome using dynamic dispatch. This encoding allows class hierarchies to be open for extension in separately-compiled modules, therefore allowing the construction of modular programs. 
 
 \keywords{Haskell, Monad Transformers, Object-Oriented Programming}
-
-========
-
-We present an encoding of (imperative, class-based) objects in pure Haskell
-supporting most conventional features of object-oriented languages,
-including object classes, inheritance, subtype polymorphism, and dynamic
-dispatch.
-[what's object classes?  does class-based above express the same idea?]
-[do we say "but not aliasing"?]
-We show a correspondence between inheritance and monad
-transformers by defining a state monad transformer for each class,
-parametrised only over the class's own state.
-[These sentence seems to say two things: "a new connection", and "how we
-use it"].
-The methods of a class are
-monadic computations which run on top of a stack of monad transformers,
-consisting of one layer for the class and each of its ancestors.
-The well-known monad-transformer limitation that functions must be `lifted'
-into the right
-place within a monad stack is overcome using dynamic dispatch.
-[... and this is appropriate for OO?]
 \end{abstract}
 
 
 \section{Introduction}
+\label{sec:introduction}
 
-Our contributions are:
+It is folklore that dynamic dispatch can be implemented in Haskell with existential types and type classes. In the following example, a value of type $\mathit{Bird}$ is constructed by applying the $\mathit{MkBird}$ constructor to some type $a$ for which there is an instance of the $\mathit{BirdLike}$ type class:
+\begin{displaymath}
+\begin{array}{lcl}
+\mathbf{data}~\mathit{Bird} & = & \forall a. \mathit{BirdLike}~a \Rightarrow \mathit{MkBird}~a
+\end{array}
+\end{displaymath}
+The $\mathit{Bird}$ type effectively serves as an abstract base class. It is not possible to obtain a value of this type without some other type $a$ which implements $\mathit{BirdLike}$. Any such type can be seen as a subtype of $\mathit{Bird}$ and type-casts to the base class are possible by applying the $\mathit{MkBird}$ constructor. The type class constraint ensures that every subtype has the properties we would expect of, in this example, a bird.
+
+This is an intriguing concept, but is often perceived as an anti-pattern \todo{cite?}. After all, why would we bother with a base class type if we can simply place a type class constraint on every function expecting bird-like arguments and avoid the $\mathit{Bird}$ type all-together?
+
+We answer this question and show how the above concept can be elevated from a neat trick without much practical use to the foundation of an object system with a range of applications \todo{``range of''?}. Specifically, our contributions are:
 \begin{itemize}
-\item An encoding of...
-\item Is open
-\item Circumvents the need for ``lifting''
+\item We build upon the technique of using existential types combined with type classes to encode a comprehensive object system in Haskell, supporting object classes, inheritance, subtype polymorphism, and dynamic dispatch \todo{adjust this list?}. In section \ref{sec:usage} we first show how objects in our encoding are used within a standard Haskell program, before describing the encoding itself in section \ref{sec:encoding}.
+\item Class hierarchies in our encoding are open for extension in separately-compiled modules. We thereby improve upon \emph{e.g.} open data types and functions which require whole program compilation.
+\item Monad transformers are infamous \todo{cite?} for requiring programmers to explicitly reference where in a stack of monad transformers a function should be executed. In Haskell, this is accomplished by wrapping a function in a call to $\mathit{lift}$ for every monad in the stack that should be skipped. Our system hides this boilerplate in the dynamic dispatch mechanism. 
+\item In section \ref{sec:auto}, we show a simple notation for object classes, following the conventions of object-oriented languages, that can be used by a pre-processor to generate the corresponding encodings in Haskell.
 \end{itemize}
 
 \section{Using the Encoding}
+\label{sec:usage}
+
+Before diving into the mechanics of our encoding, let us consider a couple of \todo{adjust} examples in the notation which we will introduce in detail in section \ref{sec:auto}.
+
+\begin{displaymath}
+\begin{array}{l}
+\mathbf{state}~\mathit{MutableListItem}~a~\mathbf{where} \\
+\quad \begin{array}{lcl}
+\mathbf{data}~\mathit{value} & :: & a \\
+\mathbf{data}~\mathit{next}  & :: & \mathit{Maybe}~(\mathit{MutableListItem}~a)
+\end{array}\\\\
+\quad \begin{array}{lcl}
+\mathit{insertTo} & :: & \mathit{MutableListItem}~a \to ()\\
+\mathit{insertTo}~v & = & \mathbf{do} \\
+\multicolumn{3}{l}{\quad \begin{array}{lcl}
+\mathit{mn} & <: & \mathit{next} \\
+\multicolumn{3}{l}{\mathbf{case}~\mathit{mn}~\mathbf{of}} \\
+\multicolumn{3}{l}{\quad \begin{array}{lcl}
+\mathit{Nothing} & \to & \mathbf{do}~(\mathit{Just}~v) >: \mathit{next} \\
+(\mathit{Just}~n) & \to & \mathbf{do}~(\mathit{snd}~\$~n.\mathit{insertTo}~v) >: \mathit{next}
+\end{array}}
+\end{array}}
+\end{array}
+\end{array}
+\end{displaymath}
+This declaration introduces a new object class $\mathit{MutableListItem}$ with two fields, $\mathit{value}$ and $\mathit{next}$, as well as one method named $\mathit{insertTo}$. The type of this method may initially seem confusing since we would expect it to return an updated object and the $\mathbf{do}$-notation suggests a monad. This is indeed the case, but since all methods are automatically state transformers belonging to a state monad
+
+We take $\mathit{MutableListItem}$ objects to declare a $\mathit{MutableList}$ class:
+\begin{displaymath}
+\begin{array}{l}
+\mathbf{state}~\mathit{MutableList}~a~\mathbf{where} \\
+\quad \begin{array}{lcl}
+\mathbf{data}~\mathit{root}  & :: & \mathit{Maybe}~(\mathit{MutableListItem}~a)
+\end{array}\\\\
+\quad \begin{array}{lcl}
+\mathit{insert} & :: & a \to ()\\
+\mathit{insert}~v & = & \mathbf{do} \\
+\multicolumn{3}{l}{\quad \begin{array}{lcl}
+\multicolumn{3}{l}{\mathbf{let}}\\
+\multicolumn{3}{l}{\quad \mathit{item} = \mathbf{new}~\mathit{MutableListItem}~v~\mathit{Nothing}} \\
+\mathit{mr} & <: & \mathit{root} \\
+\multicolumn{3}{l}{\mathbf{case}~\mathit{mr}~\mathbf{of}} \\
+\multicolumn{3}{l}{\quad \begin{array}{lcl}
+\mathit{Nothing} & \to & \mathbf{do}~(\mathit{Just}~\mathit{item}) >: \mathit{root} \\
+(\mathit{Just}~r) & \to & \mathbf{do}~(\mathit{Just}~(\mathit{snd}~\$~r.\mathit{insertTo}~\mathit{item})) >: \mathit{root}
+\end{array}}
+\end{array}}
+\end{array}
+\end{array}
+\end{displaymath}
 
 \section{Encoding}
+\label{sec:encoding}
+
+\todo{The gory details}
+
+\begin{itemize}
+\item Three types per object class: data, object, and state monad
+\item Different ``zipper'' arrangements depending on base/child, abstract, and final attributes
+\item Type class per object class with 2 functions for each method (external vs. internal call)
+\item Zipper traversal in the function definitions and construction of the monad stack
+\end{itemize}
 
 \section{Casts}
+\label{sec:casts}
+
+So far we have shown how to call methods on base class objects, but since subtyping is not just represented on type level, but also in the value representation of an object, 
+
+\begin{itemize}
+\item internal $\mathit{invoke}$ function which uses the zipper to construct a monad stack from an arbitrary focus
+\end{itemize}
 
 \section{Auto-generation}
+\label{sec:auto}
+
+\begin{itemize}
+\item translation rules for notation to standard Haskell
+\end{itemize}
 
 \section{Related Work}
+\label{sec:related}
 
 \begin{itemize}
 \item Haskell's hidden object system
@@ -120,251 +187,59 @@ Our contributions are:
 \item extensible effects, etc.
 \end{itemize}
 
+\todo{Relevant parts from my thesis proposal:}
+
+\cite{jaskelioff2011monatron} shows a monad transformer library called \emph{Monatron} which features an improved lifting mechanism at the cost of increased implementation complexity. \cite{schrijvers2011monads} describe \emph{monad zippers} and \emph{monad views} which are used to hide and address parts of monad stacks, respectively.
+
+The most promising solution so far has been presented in \cite{kiselyov2013extensible} where a single monad, parameterised over a set of effect handlers \cite{plotkin2009handlers} is used to effectively implement an effect system in Haskell. The order of effects is not fixed on the type-level, but is determined on the value level. This system is also more efficient than monad transformers since it is no longer necessary to call each monad's $\gg\!\!=$ function at every step. 
+
+%\section{Effect handlers}
+
+%Effect handlers \citep{plotkin2009handlers}, etc.
+
+Extending Haskell with an object system is not a new idea. \cite{OOHaskell} present such an encoding, but focus on remaining true to object-oriented programming. As a result, their system is impure and requires IO references to account for mutability and aliasing. \cite{shields2001object} show how to extend Haskell to allow the encoding of object-oriented style overloading. Their goal is to allow Haskell programs to provide interfaces to libraries written in object-oriented languages, but not to write object-oriented style code in Haskell itself.
+
+In more theoretical work, \cite{Pierce93simpletype-theoretic} present a typed $\lambda$-calculus with support for encapsulation, message passing, subtyping, and inheritance. Methods in this calculus are state transformers, but they do not form stacks of state monad transformers. Instead, methods simply use the object as state as in traditional object-oriented programming.
+
+The expression problem \cite{wadler1998expression} is concerned with extending programs with new functionality without having to change any of the existing code. A classical example of this is wishing to extend an expression language which supports basic arithmetic expressions with new forms of expressions which add \emph{e.g.} support for exceptions.  
+
+In object-oriented programming languages this can be accomplished using an abstract class for expressions which all forms of expressions derive from. Our system allows for similar implementations. However, other approaches exist for Haskell. \cite{loh2006open} propose an extension to Haskell which enables data types and functions to be marked as ``open'', allowing new constructors and equations to be added respectively after an initial declaration. This is accomplished by generating normal data types and functions from all open declarations within a program. Unfortunately, their proposal also requires the order in which pattern matching occurs to be changed.
+
+\cite{swierstra2008data} shows how modular data types can be constructed without any new extensions to Haskell's type system. This approach has been used to construct \emph{e.g.} modular compilers \cite{day2012towards}, but is more complicated than open data types are. 
+
 \section{Conclusion and Future Work}
+\label{sec:conclusions}
 
-extend to other monads
+\begin{itemize}
+\item extend to other monad transformers / effects to avoid the ``lifting''
+\item exploit additional structure for more efficient compilation 
+\end{itemize}
 
-
-\section{Paper Preparation}
-
-
-Please use the commands \verb+\label+ and \verb+\ref+ for
-cross-references and the commands \verb+\bibitem+ and \verb+\cite+ for
-references to the bibliography, to enable us to create hyperlinks at
-these places.
-
-For preparing your figures electronically and integrating them into
-your source file we recommend using the standard \LaTeX{} \verb+graphics+ or
-\verb+graphicx+ package. These provide the \verb+\includegraphics+ command.
-In general, please refrain from using the \verb+\special+ command.
-
-Remember to submit any further style files and
-fonts you have used together with your source files.
-
-\subsubsection{Headings.}
-
-Headings should be capitalized
-(i.e., nouns, verbs, and all other words
-except articles, prepositions, and conjunctions should be set with an
-initial capital) and should,
-with the exception of the title, be aligned to the left.
-Words joined by a hyphen are subject to a special rule. If the first
-word can stand alone, the second word should be capitalized.
-
-Here are some examples of headings: ``Criteria to Disprove
-Context-Freeness of Collage Language", ``On Correcting the Intrusion of
-Tracing Non-deterministic Programs by Software", ``A User-Friendly and
-Extendable Data Distribution System", ``Multi-flip Networks:
-Parallelizing GenSAT", ``Self-determinations of Man".
-
-\subsubsection{Lemmas, Propositions, and Theorems.}
-
-The numbers accorded to lemmas, propositions, and theorems, etc. should
-appear in consecutive order, starting with Lemma 1, and not, for
-example, with Lemma 11.
-
-\subsection{Figures}
-
-For \LaTeX\ users, we recommend using the \emph{graphics} or \emph{graphicx}
-package and the \verb+\includegraphics+ command.
-
-Please check that the lines in line drawings are not
-interrupted and are of a constant width. Grids and details within the
-figures must be clearly legible and may not be written one on top of
-the other. Line drawings should have a resolution of at least 800 dpi
-(preferably 1200 dpi). The lettering in figures should have a height of
-2~mm (10-point type). Figures should be numbered and should have a
-caption which should always be positioned \emph{under} the figures, in
-contrast to the caption belonging to a table, which should always appear
-\emph{above} the table; this is simply achieved as matter of sequence in
-your source.
-
-Please center the figures or your tabular material by using the \verb+\centering+
-declaration. Short captions are centered by default between the margins
-and typeset in 9-point type (Fig.~\ref{fig:example} shows an example).
-The distance between text and figure is preset to be about 8~mm, the
-distance between figure and caption about 6~mm.
-
-To ensure that the reproduction of your illustrations is of a reasonable
-quality, we advise against the use of shading. The contrast should be as
-pronounced as possible.
-
-If screenshots are necessary, please make sure that you are happy with
-the print quality before you send the files.
-\begin{figure}
-\centering
-\includegraphics[height=6.2cm]{eijkel2}
-\caption{One kernel at $x_s$ (\emph{dotted kernel}) or two kernels at
-$x_i$ and $x_j$ (\textit{left and right}) lead to the same summed estimate
-at $x_s$. This shows a figure consisting of different types of
-lines. Elements of the figure described in the caption should be set in
-italics, in parentheses, as shown in this sample caption.}
-\label{fig:example}
-\end{figure}
-
-Please define figures (and tables) as floating objects. Please avoid
-using optional location parameters like ``\verb+[h]+" for ``here".
-
-\paragraph{Remark 1.}
-
-In the printed volumes, illustrations are generally black and white
-(halftones), and only in exceptional cases, and if the author is
-prepared to cover the extra cost for color reproduction, are colored
-pictures accepted. Colored pictures are welcome in the electronic
-version free of charge. If you send colored figures that are to be
-printed in black and white, please make sure that they really are
-legible in black and white. Some colors as well as the contrast of
-converted colors show up very poorly when printed in black and white.
-
-\subsection{Formulas}
-
-Displayed equations or formulas are centered and set on a separate
-line (with an extra line or halfline space above and below). Displayed
-expressions should be numbered for reference. The numbers should be
-consecutive within each section or within the contribution,
-with numbers enclosed in parentheses and set on the right margin --
-which is the default if you use the \emph{equation} environment, e.g.,
-\begin{equation}
-  \psi (u) = \int_{o}^{T} \left[\frac{1}{2}
-  \left(\Lambda_{o}^{-1} u,u\right) + N^{\ast} (-u)\right] dt \;  .
-\end{equation}
-
-Equations should be punctuated in the same way as ordinary
-text but with a small space before the end punctuation mark.
-
-\subsection{Footnotes}
-
-The superscript numeral used to refer to a footnote appears in the text
-either directly after the word to be discussed or -- in relation to a
-phrase or a sentence -- following the punctuation sign (comma,
-semicolon, or period). Footnotes should appear at the bottom of
-the
-normal text area, with a line of about 2~cm set
-immediately above them.\footnote{The footnote numeral is set flush left
-and the text follows with the usual word spacing.}
-
-\subsection{Program Code}
-
-Program listings or program commands in the text are normally set in
-typewriter font, e.g., CMTT10 or Courier.
-
-\medskip
-
-\noindent
-{\it Example of a Computer Program}
-\begin{verbatim}
-program Inflation (Output)
-  {Assuming annual inflation rates of 7%, 8%, and 10%,...
-   years};
-   const
-     MaxYears = 10;
-   var
-     Year: 0..MaxYears;
-     Factor1, Factor2, Factor3: Real;
-   begin
-     Year := 0;
-     Factor1 := 1.0; Factor2 := 1.0; Factor3 := 1.0;
-     WriteLn('Year  7% 8% 10%'); WriteLn;
-     repeat
-       Year := Year + 1;
-       Factor1 := Factor1 * 1.07;
-       Factor2 := Factor2 * 1.08;
-       Factor3 := Factor3 * 1.10;
-       WriteLn(Year:5,Factor1:7:3,Factor2:7:3,Factor3:7:3)
-     until Year = MaxYears
-end.
-\end{verbatim}
-%
-\noindent
-{\small (Example from Jensen K., Wirth N. (1991) Pascal user manual and
-report. Springer, New York)}
-
-\subsection{Citations}
-
-For citations in the text please use
-square brackets and consecutive numbers: \cite{jour}, \cite{lncschap},
-\cite{proceeding1} -- provided automatically
-by \LaTeX 's \verb|\cite| \dots\verb|\bibitem| mechanism.
-
-\subsection{Page Numbering and Running Heads}
-
-There is no need to include page numbers. If your paper title is too
-long to serve as a running head, it will be shortened. Your suggestion
-as to how to shorten it would be most welcome.
-
-\section{LNCS Online}
-
-The online version of the volume will be available in LNCS Online.
-Members of institutes subscribing to the Lecture Notes in Computer
-Science series have access to all the pdfs of all the online
-publications. Non-subscribers can only read as far as the abstracts. If
-they try to go beyond this point, they are automatically asked, whether
-they would like to order the pdf, and are given instructions as to how
-to do so.
-
-Please note that, if your email address is given in your paper,
-it will also be included in the meta data of the online version.
-
-\section{BibTeX Entries}
-
-The correct BibTeX entries for the Lecture Notes in Computer Science
-volumes can be found at the following Website shortly after the
-publication of the book:
-\url{http://www.informatik.uni-trier.de/~ley/db/journals/lncs.html}
-
-\subsubsection*{Acknowledgments.} The heading should be treated as a
-subsubsection heading and should not be assigned a number.
-
-\section{The References Section}\label{references}
-
-
-The following section shows a sample reference list with entries for
-journal articles \cite{jour}, an LNCS chapter \cite{lncschap}, a book
-\cite{book}, proceedings without editors \cite{proceeding1} and
-\cite{proceeding2}, as well as a URL \cite{url}.
-Please note that proceedings published in LNCS are not cited with their
-full titles, but with their acronyms!
+\subsubsection*{Acknowledgments.} Content
 
 \begin{thebibliography}{4}
 
-\bibitem{jour} Smith, T.F., Waterman, M.S.: Identification of Common Molecular
-Subsequences. J. Mol. Biol. 147, 195--197 (1981)
+%\bibitem{jour} Smith, T.F., Waterman, M.S.: Identification of Common Molecular
+%Subsequences. J. Mol. Biol. 147, 195--197 (1981)
 
-\bibitem{lncschap} May, P., Ehrlich, H.C., Steinke, T.: ZIB Structure Prediction Pipeline:
-Composing a Complex Biological Workflow through Web Services. In: Nagel,
-W.E., Walter, W.V., Lehner, W. (eds.) Euro-Par 2006. LNCS, vol. 4128,
-pp. 1148--1158. Springer, Heidelberg (2006)
+%\bibitem{lncschap} May, P., Ehrlich, H.C., Steinke, T.: ZIB Structure Prediction Pipeline:
+%Composing a Complex Biological Workflow through Web Services. In: Nagel,
+%W.E., Walter, W.V., Lehner, W. (eds.) Euro-Par 2006. LNCS, vol. 4128,
+%pp. 1148--1158. Springer, Heidelberg (2006)
 
-\bibitem{book} Foster, I., Kesselman, C.: The Grid: Blueprint for a New Computing
-Infrastructure. Morgan Kaufmann, San Francisco (1999)
+%\bibitem{book} Foster, I., Kesselman, C.: The Grid: Blueprint for a New Computing
+%Infrastructure. Morgan Kaufmann, San Francisco (1999)
 
-\bibitem{proceeding1} Czajkowski, K., Fitzgerald, S., Foster, I., Kesselman, C.: Grid
-Information Services for Distributed Resource Sharing. In: 10th IEEE
-International Symposium on High Performance Distributed Computing, pp.
-181--184. IEEE Press, New York (2001)
+%\bibitem{proceeding1} Czajkowski, K., Fitzgerald, S., Foster, I., Kesselman, C.: Grid
+%Information Services for Distributed Resource Sharing. In: 10th IEEE
+%International Symposium on High Performance Distributed Computing, pp.
+%181--184. IEEE Press, New York (2001)
 
-\bibitem{proceeding2} Foster, I., Kesselman, C., Nick, J., Tuecke, S.: The Physiology of the
-Grid: an Open Grid Services Architecture for Distributed Systems
-Integration. Technical report, Global Grid Forum (2002)
+%\bibitem{proceeding2} Foster, I., Kesselman, C., Nick, J., Tuecke, S.: The Physiology of the
+%Grid: an Open Grid Services Architecture for Distributed Systems
+%Integration. Technical report, Global Grid Forum (2002)
 
-\bibitem{url} National Center for Biotechnology Information, \url{http://www.ncbi.nlm.nih.gov}
+%\bibitem{url} National Center for Biotechnology Information, \url{http://www.ncbi.nlm.nih.gov}
 
 \end{thebibliography}
-
-\section{Checklist of Items to be Sent to Volume Editors}
-Here is a checklist of everything the volume editor requires from you:
-
-
-\begin{itemize}
-\settowidth{\leftmargin}{{\Large$\square$}}\advance\leftmargin\labelsep
-\itemsep8pt\relax
-\renewcommand\labelitemi{{\lower1.5pt\hbox{\Large$\square$}}}
-
-\item The final \LaTeX{} source files
-\item A final PDF file
-\item A copyright form, signed by one author on behalf of all of the
-authors of the paper.
-\item A readme giving the name and email address of the
-corresponding author.
-\end{itemize}
 \end{document}
