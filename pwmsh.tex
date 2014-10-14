@@ -70,7 +70,7 @@
 
 
 \begin{abstract}
-We present an encoding of an object system in pure Haskell supporting most conventional features of object-oriented languages, including object classes, inheritance, subtype polymorphism, and dynamic dispatch. We show a correspondence between inheritance and monad transformers by defining a state monad transformer for each class, parametrised only over the class's own state. The methods of a class are monadic computations which run on top of a stack of monad transformers, consisting of one layer for the class and each of its ancestors. The well-known limitation that functions must be ``lifted'' into the right place within a monad stack is overcome using dynamic dispatch. This encoding allows class hierarchies to be open for extension in separately-compiled modules, therefore allowing the construction of modular programs. 
+We present an encoding of an object system in pure Haskell which supports most conventional features of object-oriented languages, including object classes, inheritance, subtype polymorphism, and dynamic dispatch. We show a correspondence between inheritance and monad transformers by defining a state monad transformer for each class, parametrised only over the class's own state. The methods of a class are monadic computations which run on top of a stack of monad transformers, consisting of one layer for the class and each of its ancestors. The well-known limitation that functions must be ``lifted'' into the right place within a monad stack is overcome using dynamic dispatch. This encoding allows class hierarchies to be open for extension in separately-compiled modules, therefore allowing the construction of modular programs. 
 
 \keywords{Haskell, Monad Transformers, Object-Oriented Programming}
 \end{abstract}
@@ -78,6 +78,9 @@ We present an encoding of an object system in pure Haskell supporting most conve
 
 \section{Introduction}
 \label{sec:introduction}
+
+\todo{Alan: may be confusing for referees with backgrounds in either OO or FUN}
+\todo{Should there be some form of introduction to monads -- in particularly the state monad? Maybe a reference to a good paper?}
 
 It is folklore that dynamic dispatch can be implemented in Haskell with existential types and type classes. In the following example, a value of type $\mathit{Bird}$ is constructed by applying the $\mathit{MkBird}$ constructor to some type $a$ for which there is an instance of the $\mathit{BirdLike}$ type class:
 \begin{displaymath}
@@ -87,21 +90,20 @@ It is folklore that dynamic dispatch can be implemented in Haskell with existent
 \end{displaymath}
 The $\mathit{Bird}$ type effectively serves as an abstract base class. It is not possible to obtain a value of this type without some other type $a$ which implements $\mathit{BirdLike}$. Any such type can be seen as a subtype of $\mathit{Bird}$ and type-casts to the base class are possible by applying the $\mathit{MkBird}$ constructor. The type class constraint ensures that every subtype has the properties we would expect of, in this example, a bird.
 
-This is an intriguing concept, but is often perceived as an anti-pattern \todo{cite?}. After all, why would we bother with a base class type if we can simply place a type class constraint on every function expecting bird-like arguments and avoid the $\mathit{Bird}$ type all-together?
+This is an intriguing concept, but is often perceived as an anti-pattern \todo{cite?}. After all, why should we bother with a base class type if we can simply place a type class constraint on every function expecting bird-like arguments and avoid the $\mathit{Bird}$ type all-together?
 
-We answer this question and show how the above concept can be elevated from a neat trick without much practical use to the foundation of an object system with a range of applications \todo{``range of''?}. Specifically, our contributions are:
+We answer this question and show how the above concept can be elevated from a neat trick without much practical use to the foundation of an object system for purely-functional languages with a range of benefits \todo{``range of''?}. Specifically, our contributions are:
 \begin{itemize}
-\item We build upon the technique of using existential types combined with type classes to encode a comprehensive object system in Haskell, supporting object classes, inheritance, subtype polymorphism, and dynamic dispatch \todo{adjust this list?}. In section \ref{sec:usage} we first show how objects in our encoding are used within a standard Haskell program, before describing the encoding itself in section \ref{sec:encoding}.
-\item Class hierarchies in our encoding are open for extension in separately-compiled modules. We thereby improve upon \emph{e.g.} open data types and functions which require whole program compilation.
-\item Monad transformers are infamous \todo{cite?} for requiring programmers to explicitly reference where in a stack of monad transformers a function should be executed. In Haskell, this is accomplished by wrapping a function in a call to $\mathit{lift}$ for every monad in the stack that should be skipped. Our system hides this boilerplate in the dynamic dispatch mechanism. 
-\item In section \ref{sec:auto}, we show a simple notation for object classes, following the conventions of object-oriented languages, that can be used by a pre-processor to generate the corresponding encodings in Haskell.
+\item We build upon the technique of using existential types combined with type classes to encode a comprehensive object system in Haskell, supporting object classes, inheritance, subtype polymorphism, and non-aliased mutation \todo{adjust this list?}. In Section \ref{sec:usage} we first show how objects in our encoding are used within a standard Haskell program, before describing the encoding itself in Section \ref{sec:encoding}.
+\item Class hierarchies in our encoding are open for extension in separately-compiled modules. We thereby improve upon \emph{e.g.} open data types and functions\cite{loh2006open} which require whole program compilation.
+\item \todo{Alan: monad stacks?}Monad transformers are infamous \todo{cite?} for requiring programmers to explicitly reference where in a stack of monad transformers a function should be executed. In Haskell, this is accomplished by wrapping a function in a call to $\mathit{lift}$ for every monad in the stack that should be skipped. Our system hides this boilerplate in the dynamic dispatch mechanism. 
+\item In Section \ref{sec:auto}, we show a simple notation for object classes, following the conventions of object-oriented languages, that can be used by a pre-processor to generate the corresponding encodings in Haskell.
 \end{itemize}
 
 \section{Using the Encoding}
 \label{sec:usage}
 
-Before diving into the mechanics of our encoding, let us consider a couple of \todo{adjust} examples in the notation which we will introduce in detail in section \ref{sec:auto}.
-
+Before diving into the mechanics of our encoding, let us consider a couple of \todo{adjust} examples in the notation which we introduce in detail in Section \ref{sec:auto}. We begin with an implementation of OO-style linked lists, for which we firstly define a class of list items:
 \begin{displaymath}
 \begin{array}{l}
 \mathbf{state}~\mathit{MutableListItem}~a~\mathbf{where} \\
@@ -116,16 +118,26 @@ Before diving into the mechanics of our encoding, let us consider a couple of \t
 \mathit{mn} & <: & \mathit{next} \\
 \multicolumn{3}{l}{\mathbf{case}~\mathit{mn}~\mathbf{of}} \\
 \multicolumn{3}{l}{\quad \begin{array}{lcl}
-\mathit{Nothing} & \to & \mathbf{do}~(\mathit{Just}~v) >: \mathit{next} \\
-(\mathit{Just}~n) & \to & \mathbf{do}~(\mathit{snd}~\$~n.\mathit{insertTo}~v) >: \mathit{next}
+\mathit{Nothing} & \to & \mathbf{do}~\mathit{Just}~v >: \mathit{next} \\
+(\mathit{Just}~n) & \to & \mathbf{do}~\mathit{Just}~(\mathit{snd}~\$~n.\mathit{insertTo}~v) >: \mathit{next}
 \end{array}}
 \end{array}}
 \end{array}
 \end{array}
 \end{displaymath}
-This declaration introduces a new object class $\mathit{MutableListItem}$ with two fields, $\mathit{value}$ and $\mathit{next}$, as well as one method named $\mathit{insertTo}$. The type of this method may initially seem confusing since we would expect it to return an updated object and the $\mathbf{do}$-notation suggests a monad. This is indeed the case, but since all methods are automatically state transformers belonging to a state monad
+This declaration introduces a new object class $\mathit{MutableListItem}$ with two fields, $\mathit{value}$ and $\mathit{next}$, as well as one method named $\mathit{insertTo}$. Note that the explicit typing for this method gives it a pure type, despite having the effect of transforming an object's state. The reason for this design choice is twofold: the effectful type can be inferred from the context in which the method is defined and the corresponding monad is not given a name until we desugar the class definition. % The type of this method may initially seem confusing since we would expect it to return an updated object and the $\mathbf{do}$-notation suggests a monad. This is indeed the case, but since all methods are automatically state transformers belonging to a state monad
 
-We take $\mathit{MutableListItem}$ objects to declare a $\mathit{MutableList}$ class:
+Our notation also extends Haskell's $\mathbf{do}$ notation with two new forms of statements. A $\mathit{pattern} <: \mathit{name}$ statement gets the current value of the field whose name is given by $\mathit{name}$ and binds it to $\mathit{pattern}$. Conversely, a $\mathit{expr} >: \mathit{name}$ statement sets the value of the $\mathit{name}$ field to that of $\mathit{expr}$.
+
+For convenience, we define a function
+\begin{displaymath}
+\begin{array}{lcl}
+\mathit{mkItem} & :: & a \to \mathit{MutableListItem}~a \\
+\mathit{mkItem}~v & = & \mathbf{new}~\mathit{MutableListItem}~v
+\end{array}
+\end{displaymath}
+
+A chain of $\mathit{MutableListItem}$ objects represents a linked list, in which each element's $\mathit{next}$ field stores the next element. A value of $\mathit{Nothing}$ indicates the end of the list. To account for the empty list, we declare a $\mathit{MutableList}$ class which we use as the start of a linked list:
 \begin{displaymath}
 \begin{array}{l}
 \mathbf{state}~\mathit{MutableList}~a~\mathbf{where} \\
@@ -133,21 +145,78 @@ We take $\mathit{MutableListItem}$ objects to declare a $\mathit{MutableList}$ c
 \mathbf{data}~\mathit{root}  & :: & \mathit{Maybe}~(\mathit{MutableListItem}~a)
 \end{array}\\\\
 \quad \begin{array}{lcl}
+\mathit{insert} & :: & a \to () %\\
+%\mathit{insert}~v & = & \mathbf{do} \\
+%\multicolumn{3}{l}{\quad \begin{array}{lcl}
+%\multicolumn{3}{l}{\mathbf{let}}\\
+%\multicolumn{3}{l}{\quad \mathit{item} = \mathit{mkItem}~v} \\
+%\mathit{mr} & <: & \mathit{root} \\
+%\multicolumn{3}{l}{\mathbf{case}~\mathit{mr}~\mathbf{of}} \\
+%\multicolumn{3}{l}{\quad \begin{array}{lcl}
+%\mathit{Nothing} & \to & \mathbf{do}~\mathit{Just}~\mathit{item} >: \mathit{root} \\
+%(\mathit{Just}~r) & \to & \mathbf{do}~\mathit{Just}~(\mathit{snd}~\$~r.\mathit{insertTo}~\mathit{item}) >: \mathit{root}
+%\end{array}}
+%\end{array}}
+\end{array}
+\end{array}
+\end{displaymath}
+
+\begin{displaymath}
+\begin{array}{lcl}
+\mathit{test} & :: & \mathit{MutableList}~\mathit{Int} \to ([\mathit{Int}], \mathit{MutableList}~\mathit{Int})\\
+\mathit{test}~l & = & \mathbf{let} \\
+\multicolumn{3}{l}{\quad \begin{array}{lcl}
+a & = & \mathit{snd}~\$~l.\mathit{insert}~23\\
+b & = & \mathit{snd}~\$~l.\mathit{insert}~16\\
+c & = & \mathit{snd}~\$~l.\mathit{insert}~42\\
+d & = & \mathit{snd}~\$~l.\mathit{insert}~24\\
+\end{array}}\\
+\multicolumn{3}{l}{\mathbf{in}~d.\mathit{toList}}
+\end{array}
+\end{displaymath}
+inserting and printing ...
+
+\begin{displaymath}
+\begin{array}{l}
+\mathbf{state}~\mathit{SortedList}~a : \mathit{MutableList}~a~\mathbf{where} \\
+\quad \begin{array}{lcl}
+\mathbf{data}~\mathit{pred}  & :: & a \to a \to \mathit{Bool}
+\end{array}\\\\
+\quad \begin{array}{lcl}
 \mathit{insert} & :: & a \to ()\\
 \mathit{insert}~v & = & \mathbf{do} \\
 \multicolumn{3}{l}{\quad \begin{array}{lcl}
 \multicolumn{3}{l}{\mathbf{let}}\\
-\multicolumn{3}{l}{\quad \mathit{item} = \mathbf{new}~\mathit{MutableListItem}~v~\mathit{Nothing}} \\
+\multicolumn{3}{l}{\quad \mathit{item} = \mathit{mkItem}~v} \\
 \mathit{mr} & <: & \mathit{root} \\
 \multicolumn{3}{l}{\mathbf{case}~\mathit{mr}~\mathbf{of}} \\
 \multicolumn{3}{l}{\quad \begin{array}{lcl}
 \mathit{Nothing} & \to & \mathbf{do}~(\mathit{Just}~\mathit{item}) >: \mathit{root} \\
-(\mathit{Just}~r) & \to & \mathbf{do}~(\mathit{Just}~(\mathit{snd}~\$~r.\mathit{insertTo}~\mathit{item})) >: \mathit{root}
+(\mathit{Just}~r) & \to & \mathbf{do} \\
+\multicolumn{3}{l}{\quad \begin{array}{lcl}
+p & <: & \mathit{pred} \\
+\mathit{Just}~(\mathit{helper}~v~p~r) & >: & \mathit{root}
+\end{array}}
 \end{array}}
 \end{array}}
 \end{array}
 \end{array}
 \end{displaymath}
+
+\begin{displaymath}
+\begin{array}{lcl}
+\multicolumn{3}{l}{\mathit{helper} :: a \to (a \to a \to \mathit{Bool}) \to \mathit{MutableListItem}~a \to \mathit{MutableListItem}~a} \\
+\mathit{helper}~v~p~i & = & \mathbf{let}~\mathit{rv} = c.\mathit{getValue}~\mathbf{in}\\
+\multicolumn{3}{l}{\quad \mathbf{if}~v~`p`~rv~\mathbf{then}~\mathbf{case}~c.\mathit{getNext}~\mathbf{of}} \\
+\multicolumn{3}{l}{\quad \quad \begin{array}{lcl}
+\mathit{Nothing} & \to & c.\mathit{setNext}~\$~\mathit{Just}~\$~\mathit{mkItem}~v \\
+(\mathit{Just}~n) & \to & c.\mathit{setNext}~\$~\mathit{Just}~\$~\mathit{helper}~v~p~n 
+\end{array}} \\
+\multicolumn{3}{l}{\quad \mathbf{else}~(\mathit{mkItem}~v).\mathit{setNext}~(\mathit{Just}~c)}
+\end{array}
+\end{displaymath}
+   
+\todo{benefits, biggest potential criticism: a lot of complexity for little (obvious) programming gain}
 
 \section{Encoding}
 \label{sec:encoding}
@@ -213,11 +282,71 @@ In object-oriented programming languages this can be accomplished using an abstr
 \begin{itemize}
 \item extend to other monad transformers / effects to avoid the ``lifting''
 \item exploit additional structure for more efficient compilation 
+\item aliasing 
 \end{itemize}
 
 \subsubsection*{Acknowledgments.} Content
 
 \begin{thebibliography}{4}
+
+\bibitem{day2012towards}
+Day, Laurence~E. \& Hutton, Graham.
+\newblock Towards modular compilers for effects.
+\newblock In \emph{Trends in Functional Programming}, pages 49--64. Springer,
+  2012.
+
+\bibitem{jaskelioff2011monatron}
+Jaskelioff, Mauro.
+\newblock Monatron: An extensible monad transformer library.
+\newblock In \emph{Implementation and Application of Functional Languages},
+  pages 233--248. Springer, 2011.
+  
+\bibitem{OOHaskell}
+  Kiselyov, Oleg \& L{\"a}mmel, Ralf.
+  \newblock {Haskell's overlooked object system}.
+  \newblock \emph{arXiv preprint cs/0509027}, 2005.
+  \newblock Draft.
+
+\bibitem{kiselyov2013extensible}
+Kiselyov, Oleg \& Sabry, Amr \& Swords, Cameron.
+\newblock Extensible effects: an alternative to monad transformers.
+\newblock In \emph{Proceedings of the 2013 ACM SIGPLAN symposium on Haskell},
+  pages 59--70. ACM, 2013.
+
+\bibitem{loh2006open}
+L{\"o}h, Andres \& Hinze, Ralf.
+\newblock Open data types and open functions.
+\newblock In \emph{Proceedings of the 8th ACM SIGPLAN international conference
+  on Principles and practice of declarative programming}, pages 133--144. ACM,
+  2006.
+
+\bibitem{plotkin2009handlers}
+Plotkin, Gordon \& Pretnar, Matija.
+\newblock Handlers of algebraic effects.
+\newblock In \emph{Programming Languages and Systems}, pages 80--94. Springer,
+  2009.
+
+\bibitem{schrijvers2011monads}
+Schrijvers, Tom \& Oliveira, Bruno C. d.~S.
+\newblock Monads, zippers and views: virtualizing the monad stack.
+\newblock In \emph{ACM SIGPLAN Notices}, volume~46, pages 32--44. ACM, 2011.
+
+\bibitem{shields2001object}
+Shields, Mark \& Peyton~Jones, Simon.
+\newblock Object-oriented style overloading for Haskell.
+\newblock \emph{Electronic Notes in Theoretical Computer Science}, 59\penalty0
+  (1):\penalty0 89--108, 2001.
+
+\bibitem{swierstra2008data}
+Swierstra, Wouter.
+\newblock Data types {\`a} la carte.
+\newblock \emph{Journal of functional programming}, 18\penalty0 (04):\penalty0
+  423--436, 2008.
+
+\bibitem{wadler1998expression}
+Wadler, Philip.
+\newblock The expression problem.
+\newblock \emph{Java-genericity mailing list}, 1998.
 
 %\bibitem{jour} Smith, T.F., Waterman, M.S.: Identification of Common Molecular
 %Subsequences. J. Mol. Biol. 147, 195--197 (1981)
