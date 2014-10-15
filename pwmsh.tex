@@ -103,16 +103,16 @@ We answer this question and show how the above concept can be elevated from a ne
 \section{Using the Encoding}
 \label{sec:usage}
 
-Before diving into the mechanics of our encoding, let us consider a couple of \todo{adjust} examples in the notation which we introduce in detail in Section \ref{sec:auto}. We begin with an implementation of OO-style linked lists, for which we firstly define a class of list items:
+Before diving into the mechanics of our encoding, let us consider a couple of \todo{adjust} examples in the notation which we introduce in detail in Section \ref{sec:auto}. We begin with an implementation of OO-style linked lists, for which we define a class of list items containing values of some type $a$:
 \begin{displaymath}
 \begin{array}{l}
-\mathbf{state}~\mathit{MutableListItem}~a~\mathbf{where} \\
+\mathbf{state}~\mathit{MListItem}~a~\mathbf{where} \\
 \quad \begin{array}{lcl}
 \mathbf{data}~\mathit{value} & :: & a \\
-\mathbf{data}~\mathit{next}  & :: & \mathit{Maybe}~(\mathit{MutableListItem}~a)
+\mathbf{data}~\mathit{next}  & :: & \mathit{Maybe}~(\mathit{MListItem}~a)
 \end{array}\\\\
 \quad \begin{array}{lcl}
-\mathit{insertTo} & :: & \mathit{MutableListItem}~a \to ()\\
+\mathit{insertTo} & :: & \mathit{MListItem}~a \to ()\\
 \mathit{insertTo}~v & = & \mathbf{do} \\
 \multicolumn{3}{l}{\quad \begin{array}{lcl}
 \mathit{mn} & <: & \mathit{next} \\
@@ -125,27 +125,29 @@ Before diving into the mechanics of our encoding, let us consider a couple of \t
 \end{array}
 \end{array}
 \end{displaymath}
-This declaration introduces a new object class $\mathit{MutableListItem}$ with two fields, $\mathit{value}$ and $\mathit{next}$, as well as one method named $\mathit{insertTo}$. Note that the explicit typing for this method gives it a pure type, despite having the effect of transforming an object's state. The reason for this design choice is twofold: the effectful type can be inferred from the context in which the method is defined and the corresponding monad is not given a name until we desugar the class definition. % The type of this method may initially seem confusing since we would expect it to return an updated object and the $\mathbf{do}$-notation suggests a monad. This is indeed the case, but since all methods are automatically state transformers belonging to a state monad
+This declaration introduces a new object class $\mathit{MListItem}$ with two fields, $\mathit{value}$ and $\mathit{next}$, as well as one method named $\mathit{insertTo}$. Note that the explicit typing for this method gives it a pure type, despite having the effect of transforming an object's state. The reason for this design choice is twofold: the effectful type can be inferred from the context in which the method is defined and the corresponding monad is not given a name until we desugar the class definition. % The type of this method may initially seem confusing since we would expect it to return an updated object and the $\mathbf{do}$-notation suggests a monad. This is indeed the case, but since all methods are automatically state transformers belonging to a state monad
 
-Our notation also extends Haskell's $\mathbf{do}$ notation with two new forms of statements. A $\mathit{pattern} <: \mathit{name}$ statement gets the current value of the field whose name is given by $\mathit{name}$ and binds it to $\mathit{pattern}$. Conversely, a $\mathit{expr} >: \mathit{name}$ statement sets the value of the $\mathit{name}$ field to that of $\mathit{expr}$.
+Our notation also extends Haskell's $\mathbf{do}$ notation with two new forms of statements. A $\mathit{pattern} <: \mathit{name}$ statement retrieves the current value of the field whose name is given by $\mathit{name}$ and binds it to $\mathit{pattern}$. Conversely, a $\mathit{expr} >: \mathit{name}$ statement sets the value of the $\mathit{name}$ field to that of $\mathit{expr}$.
 
-For convenience, we define a function
+$n.\mathit{insertTo}$ invokes the $\mathit{insertTo}$ method on $n$.
+
+For convenience, we define a function to serve as a smart constructor for new $\mathit{MListItem}$ objects below. The $\mathbf{new}$ keyword, followed by the name of an object class, is used to construct the internal structure of the object:
 \begin{displaymath}
 \begin{array}{lcl}
-\mathit{mkItem} & :: & a \to \mathit{MutableListItem}~a \\
-\mathit{mkItem}~v & = & \mathbf{new}~\mathit{MutableListItem}~v
+\mathit{mkItem} & :: & a \to \mathit{MListItem}~a \\
+\mathit{mkItem}~v & = & \mathbf{new}~\mathit{MListItem}~v~\mathit{Nothing}
 \end{array}
 \end{displaymath}
 
-A chain of $\mathit{MutableListItem}$ objects represents a linked list, in which each element's $\mathit{next}$ field stores the next element. A value of $\mathit{Nothing}$ indicates the end of the list. To account for the empty list, we declare a $\mathit{MutableList}$ class which we use as the start of a linked list:
+By setting the $\mathit{next}$ field of a $\mathit{MListItem}$ object to a value other than $\mathit{Nothing}$, elements can be added to the list. A value of $\mathit{Nothing}$ indicates the end of the list. To account for the empty list, we declare a $\mathit{MutableList}$ class which we use as the start of a linked list:
 \begin{displaymath}
 \begin{array}{l}
-\mathbf{state}~\mathit{MutableList}~a~\mathbf{where} \\
+\mathbf{state}~\mathit{MList}~a~\mathbf{where} \\
 \quad \begin{array}{lcl}
-\mathbf{data}~\mathit{root}  & :: & \mathit{Maybe}~(\mathit{MutableListItem}~a)
+\mathbf{data}~\mathit{root}  & :: & \mathit{Maybe}~(\mathit{MListItem}~a)
 \end{array}\\\\
 \quad \begin{array}{lcl}
-\mathit{insert} & :: & a \to () %\\
+\mathit{insert} & :: & a \to () \\
 %\mathit{insert}~v & = & \mathbf{do} \\
 %\multicolumn{3}{l}{\quad \begin{array}{lcl}
 %\multicolumn{3}{l}{\mathbf{let}}\\
@@ -157,13 +159,14 @@ A chain of $\mathit{MutableListItem}$ objects represents a linked list, in which
 %(\mathit{Just}~r) & \to & \mathbf{do}~\mathit{Just}~(\mathit{snd}~\$~r.\mathit{insertTo}~\mathit{item}) >: \mathit{root}
 %\end{array}}
 %\end{array}}
+\mathit{toList} & :: & [a]
 \end{array}
 \end{array}
 \end{displaymath}
-
+We omit the definitions of the $\mathit{insert}$ and $\mathit{toList}$ methods as they follow similar structures as the $\mathit{insertTo}$ method of the $\mathit{MListItem}$ class. The $\mathit{mkItem}$ function can be used to turn the value to insert into a $\mathit{MListItem}$ object. To test our construction, we define a function that, given an OO-style list of integers, inserts a few integers, and finally converts it to a functional list:
 \begin{displaymath}
 \begin{array}{lcl}
-\mathit{test} & :: & \mathit{MutableList}~\mathit{Int} \to ([\mathit{Int}], \mathit{MutableList}~\mathit{Int})\\
+\mathit{test} & :: & \mathit{MList}~\mathit{Int} \to [\mathit{Int}]\\
 \mathit{test}~l & = & \mathbf{let} \\
 \multicolumn{3}{l}{\quad \begin{array}{lcl}
 a & = & \mathit{snd}~\$~l.\mathit{insert}~23\\
@@ -171,14 +174,22 @@ b & = & \mathit{snd}~\$~l.\mathit{insert}~16\\
 c & = & \mathit{snd}~\$~l.\mathit{insert}~42\\
 d & = & \mathit{snd}~\$~l.\mathit{insert}~24\\
 \end{array}}\\
-\multicolumn{3}{l}{\mathbf{in}~d.\mathit{toList}}
+\multicolumn{3}{l}{\mathbf{in}~\mathit{fst}~\$~d.\mathit{toList}}
 \end{array}
 \end{displaymath}
-inserting and printing ...
+%Note that we assume that the $\mathit{MList}$ class has been extended with a $\mathit{toList}$ function which traverses the OO-style list and returns a corresponding functional list. 
+Applying $\mathit{test}$ to an empty list results in the following reduction:
+\begin{displaymath}
+\begin{array}{cl}
+ & \mathit{test}~(\mathbf{new}~\mathit{MList}~\mathit{Nothing}) \\
+\Rightarrow & [23,16,42,24]
+\end{array}
+\end{displaymath}
+Now suppose that we wish to define a class of lists which are always sorted according to some predicate. Instead of starting from scratch, we define a class $\mathit{SList}$ which derives from $\mathit{MList}$. This is indicated using a notation borrowed from C++:
 
 \begin{displaymath}
 \begin{array}{l}
-\mathbf{state}~\mathit{SortedList}~a : \mathit{MutableList}~a~\mathbf{where} \\
+\mathbf{state}~\mathit{SList}~a : \mathit{MList}~a~\mathbf{where} \\
 \quad \begin{array}{lcl}
 \mathbf{data}~\mathit{pred}  & :: & a \to a \to \mathit{Bool}
 \end{array}\\\\
@@ -202,21 +213,31 @@ p & <: & \mathit{pred} \\
 \end{array}
 \end{array}
 \end{displaymath}
-
+By deriving $\mathit{SList}$ from $\mathit{MList}$, it has inherited all fields and methods of its parent. Additionally, we have added a $\mathit{pred}$ field used to store the predicate according to which the list should be sorted. We have also overriden the definition of $\mathit{insert}$ to use the $\mathit{helper}$ function whose definition is given below to insert a new item at the correct position within the list:
 \begin{displaymath}
 \begin{array}{lcl}
 \multicolumn{3}{l}{\mathit{helper} :: a \to (a \to a \to \mathit{Bool}) \to \mathit{MutableListItem}~a \to \mathit{MutableListItem}~a} \\
-\mathit{helper}~v~p~i & = & \mathbf{let}~\mathit{rv} = c.\mathit{getValue}~\mathbf{in}\\
-\multicolumn{3}{l}{\quad \mathbf{if}~v~`p`~rv~\mathbf{then}~\mathbf{case}~c.\mathit{getNext}~\mathbf{of}} \\
+\mathit{helper}~v~p~i & = & \mathbf{let} \\
+\multicolumn{3}{l}{\quad \begin{array}{lcl}
+\mathit{rv} & = & c.\mathit{getValue} \\
+\mathit{item} & = & \mathit{mkItem}~v
+\end{array}}\\
+\multicolumn{3}{l}{\quad \mathbf{in}~\mathbf{if}~v~`p`~rv~\mathbf{then}~\mathbf{case}~c.\mathit{getNext}~\mathbf{of}} \\
 \multicolumn{3}{l}{\quad \quad \begin{array}{lcl}
-\mathit{Nothing} & \to & c.\mathit{setNext}~\$~\mathit{Just}~\$~\mathit{mkItem}~v \\
+\mathit{Nothing} & \to & c.\mathit{setNext}~\$~\mathit{Just}~\mathit{item} \\
 (\mathit{Just}~n) & \to & c.\mathit{setNext}~\$~\mathit{Just}~\$~\mathit{helper}~v~p~n 
 \end{array}} \\
-\multicolumn{3}{l}{\quad \mathbf{else}~(\mathit{mkItem}~v).\mathit{setNext}~(\mathit{Just}~c)}
+\multicolumn{3}{l}{\quad \mathbf{else}~\mathit{item}.\mathit{setNext}~(\mathit{Just}~c)}
 \end{array}
 \end{displaymath}
-   
-\todo{benefits, biggest potential criticism: a lot of complexity for little (obvious) programming gain}
+Applying the $\mathit{test}$ function we defined earlier to an $\mathit{SList}$ object directly is not possible. In other words, even though we consider $\mathit{SList}$ to be a subtype of $\mathit{MList}$, an explicit cast must be inserted in the form of a $\mathit{downcast}$ function:
+\begin{displaymath}
+\begin{array}{cl}
+ & \mathit{test}~(downcast~\$~\mathbf{new}~\mathit{SList}~\mathit{Nothing}~(>)) \\
+\Rightarrow & [16,23,24,42]
+\end{array}
+\end{displaymath}   
+Evaluating this expression results in a sorted list. \todo{benefits, biggest potential criticism: a lot of complexity for little (obvious) programming gain}
 
 \section{Encoding}
 \label{sec:encoding}
@@ -230,10 +251,60 @@ p & <: & \mathit{pred} \\
 \item Zipper traversal in the function definitions and construction of the monad stack
 \end{itemize}
 
+Encoding an object class in standard Haskell yields several components. Firstly, we define a single-constructor data type to represent the state of an object. For example, for the $\mathit{SList}$ class, we have the following:
+\begin{displaymath}
+\begin{array}{lcl}
+\mathbf{data}~\mathit{SListState}~a & = & \mathit{MkSListState}~\{~ \_ slist \_ pred :: a \to a \to \mathit{Bool}~\}
+\end{array}
+\end{displaymath}
+Note that this does not include any state inherited from the $\mathit{MList}$ class.
+
+
+
+
+\includegraphics{images/figures-figure0.eps}
+
+\begin{displaymath}
+\begin{array}{lcl}
+\mathbf{data}~\mathit{MutableListState}~a & = & \mathit{MkMutableListState}~\{  \} \\
+\mathbf{data}~\mathit{MutableListObject}~a & = & \\
+ & \mid & \forall s~d\\
+\mathbf{type}~\mathit{MutableList}~a & = & \mathit{StateT}~()~\mathit{Identity}
+\end{array}
+\end{displaymath}
+
+\begin{displaymath}
+\begin{array}{l}
+\mathbf{class}~\mathit{Monad}~m \Rightarrow \mathit{MutableListLike}~e~s~m~a \mid e \to s, s \to e~\mathbf{where} \\
+\quad \begin{array}{lcl}
+\mathit{\textunderscore get \textunderscore list \textunderscore root} & :: & e~a \to m~(\mathit{Maybe}~(\mathit{MutableListItemObject~a}),e~a) \\
+\mathit{insert} & :: & e~a \to a \to m~((),e~a) \\
+\mathit{insert}' & :: & a \to \mathit{StateT}~(s~a)~m~()
+\end{array}
+\end{array}
+\end{displaymath}
+
+\begin{figure}
+\begin{center}
+\begin{tabular}{|c|c|c|c|}
+\hline  & Base & Abstract & Final \\ 
+\hline zipper alignment &  &  &  \\ 
+\hline  &  &  &  \\ 
+\hline  &  &  &  \\ 
+\hline  &  &  &  \\ 
+\hline 
+\end{tabular} 
+\end{center}
+
+\caption{Object constructors}\label{tab:constructors}
+\end{figure}
+
 \section{Casts}
 \label{sec:casts}
 
-So far we have shown how to call methods on base class objects, but since subtyping is not just represented on type level, but also in the value representation of an object, 
+We have shown that calling a method on an object sets up a stack of state monad transformers parametrised over each $\delta$-object's state.
+
+So far we have shown how to call methods on base class objects, but since subtyping is represented on the value as well as the type level, we require some additional 
 
 \begin{itemize}
 \item internal $\mathit{invoke}$ function which uses the zipper to construct a monad stack from an arbitrary focus
