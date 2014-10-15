@@ -302,9 +302,9 @@ Note that this does not include any state inherited from the $\mathit{MList}$ cl
 \section{Casts}
 \label{sec:casts}
 
-We have shown that calling a method on an object sets up a stack of state monad transformers parametrised over each $\delta$-object's state. This is straight-forward if the object
+We have shown that calling a method on an object sets up a stack of state monad transformers parametrised over each $\delta$-object's state. If the object has the type of a base class, this stack can be set up in order by the dynamic dispatch mechanism. If an object has the type of a sub-class, then this becomes more difficult.
 
-So far we have shown how to call methods on base class objects, but since subtyping is represented on the value as well as the type level, we require some additional 
+
 
 \begin{itemize}
 \item internal $\mathit{invoke}$ function which uses the zipper to construct a monad stack from an arbitrary focus
@@ -320,41 +320,34 @@ So far we have shown how to call methods on base class objects, but since subtyp
 \section{Related Work}
 \label{sec:related}
 
-\begin{itemize}
-\item Haskell's hidden object system
-\item open data types and open functions
-\item data types a la carte
-\item extensible effects, etc.
-\end{itemize}
-
 \todo{Relevant parts from my thesis proposal:}
+
+%Effect handlers \citep{plotkin2009handlers}, etc.
+
+Extending Haskell with an object system is not a new idea. A previous attempt\cite{OOHaskell} presents an encoding, but focuses on remaining true to object-oriented programming. As a result, their system is impure and requires IO references to account for mutability and aliasing. \cite{shields2001object} show how to extend Haskell to allow the encoding of object-oriented style overloading. Their goal is to allow Haskell programs to provide interfaces to libraries written in object-oriented languages, but not to write object-oriented style code in Haskell itself.
+
+In more theoretical work, \cite{Pierce93simpletype-theoretic} present a typed $\lambda$-calculus with support for encapsulation, message passing, subtyping, and inheritance. Methods in this calculus are state transformers, but they do not form stacks of state monad transformers. Instead, methods simply use the object as state as in traditional object-oriented programming.
+
+The expression problem\cite{wadler1998expression} is concerned with extending programs with new functionality without having to change any of the existing code. A classical example of this is wishing to extend an expression language which supports basic arithmetic expressions with new forms of expressions which add \emph{e.g.} support for exceptions.  
+
+In object-oriented programming languages this can be accomplished using an abstract class for expressions which all forms of expressions derive from. Our system allows for similar implementations. However, other approaches exist for Haskell. Open data types and functions\cite{loh2006open} is a proposed extension for Haskell which enables data types and functions to be marked as ``open''. This keyword allows new constructors and equations to be added after an initial declaration. This is accomplished by generating normal data types and functions from all open declarations within a program. This approach has the advantage that it does not introduce any new concepts to the language. However, it does require whole-program compilation and changes to the order in which pattern matching occurs.
+
+Modular data types can be constructed in Haskell without any new extensions to Haskell's type system using the data types \`a la carte technique\cite{swierstra2008data}. This approach has been used to construct \emph{e.g.} modular compilers\cite{day2012towards}. Unlike open data types, it does not require whole-program compilation, but its barrier to entry is also higher \todo{why?}. 
 
 \cite{jaskelioff2011monatron} shows a monad transformer library called \emph{Monatron} which features an improved lifting mechanism at the cost of increased implementation complexity. \cite{schrijvers2011monads} describe \emph{monad zippers} and \emph{monad views} which are used to hide and address parts of monad stacks, respectively.
 
 The most promising solution so far has been presented in \cite{kiselyov2013extensible} where a single monad, parameterised over a set of effect handlers \cite{plotkin2009handlers} is used to effectively implement an effect system in Haskell. The order of effects is not fixed on the type-level, but is determined on the value level. This system is also more efficient than monad transformers since it is no longer necessary to call each monad's $\gg\!\!=$ function at every step. 
 
-%\section{Effect handlers}
-
-%Effect handlers \citep{plotkin2009handlers}, etc.
-
-Extending Haskell with an object system is not a new idea. \cite{OOHaskell} present such an encoding, but focus on remaining true to object-oriented programming. As a result, their system is impure and requires IO references to account for mutability and aliasing. \cite{shields2001object} show how to extend Haskell to allow the encoding of object-oriented style overloading. Their goal is to allow Haskell programs to provide interfaces to libraries written in object-oriented languages, but not to write object-oriented style code in Haskell itself.
-
-In more theoretical work, \cite{Pierce93simpletype-theoretic} present a typed $\lambda$-calculus with support for encapsulation, message passing, subtyping, and inheritance. Methods in this calculus are state transformers, but they do not form stacks of state monad transformers. Instead, methods simply use the object as state as in traditional object-oriented programming.
-
-The expression problem \cite{wadler1998expression} is concerned with extending programs with new functionality without having to change any of the existing code. A classical example of this is wishing to extend an expression language which supports basic arithmetic expressions with new forms of expressions which add \emph{e.g.} support for exceptions.  
-
-In object-oriented programming languages this can be accomplished using an abstract class for expressions which all forms of expressions derive from. Our system allows for similar implementations. However, other approaches exist for Haskell. \cite{loh2006open} propose an extension to Haskell which enables data types and functions to be marked as ``open'', allowing new constructors and equations to be added respectively after an initial declaration. This is accomplished by generating normal data types and functions from all open declarations within a program. Unfortunately, their proposal also requires the order in which pattern matching occurs to be changed.
-
-\cite{swierstra2008data} shows how modular data types can be constructed without any new extensions to Haskell's type system. This approach has been used to construct \emph{e.g.} modular compilers \cite{day2012towards}, but is more complicated than open data types are. 
-
 \section{Conclusion and Future Work}
 \label{sec:conclusions}
 
-\begin{itemize}
-\item extend to other monad transformers / effects to avoid the ``lifting''
-\item exploit additional structure for more efficient compilation 
-\item aliasing 
-\end{itemize}
+We have shown how to implement an object system in pure Haskell, built on top of monad transformers. In addition to providing the advantages of the object-oriented paradigm within a functional setting, we have also seen other benefits.
+
+The dynamic dispatch mechanism hides calls to the $\mathit{lift}$ function of monad transformers from the programmer, while also allowing more fine-grained control. Each layer of a monad stack is mapped to a corresponding class. Overriding a method in one class can be used to intercept calls from sub-classes. We believe that this is a powerful representation of monad transformers which, if generalised to monads other than the state monad, would allow us to reduce the amount of boilerplate which is currently required.
+
+A major limitation of our encoding is the lack of aliasing. While aliasing is often considered a key feature of object-oriented programming, it requires references to an object to be shareable so that an update through one can be observed through the others -- a side effect. In impure languages, this is accomplished by storing all objects in a global heap, but this makes reasoning about such programs difficult. A good compromise may be the introduction of localised heaps which are shared between all functions which possess an alias to the same object. 
+
+\todo{paragraph about efficient compilation}
 
 \subsubsection*{Acknowledgments.} Content
 
