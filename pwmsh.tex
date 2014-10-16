@@ -242,67 +242,138 @@ Evaluating this expression results in a sorted list. \todo{benefits, biggest pot
 \section{Encoding}
 \label{sec:encoding}
 
-\todo{The gory details}
+Our encoding is based on the technique of combining existential types with type classes to implement dynamic dispatch, as described in Section \ref{sec:introduction}. We observe that this basic technique corresponds to an interface in the object-oriented paradigm. It has no state and does not contain any function definitions, but merely serves as a base type for types which implement the methods described by the type class constraint. Values of such types can be ``cast'' to the base type by wrapping them inside the constructor. Therefore, a notation of subtyping exists on the value level as well as on the type level.
 
-\begin{itemize}
-\item Three types per object class: data, object, and state monad
-\item Different ``zipper'' arrangements depending on base/child, abstract, and final attributes
-\item Type class per object class with 2 functions for each method (external vs. internal call)
-\item Zipper traversal in the function definitions and construction of the monad stack
-\end{itemize}
+We now show how to expand this technique to include mutable state, \todo{complete this list}. Beginning with the state, we define a single-constructor data type to store the data of each object class. For example, for the $\mathit{MList}$ class shown in Section \ref{sec:usage}, we define the following\footnote{For convention, we use a prefix underscore to indicate that a function is only used internally by the encoding.}:
+\begin{displaymath}
+\begin{array}{lcl}
+\mathbf{data}~\mathit{MListState}~a & = & \mathit{MkMListState}~\{\\
+ && \quad \_ list \_ root :: \mathit{Maybe}~(\mathit{MListItemObject~a}) \\
+ && \}
+\end{array}
+\end{displaymath}
+This data type is used as parameter for a state monad transformer from Haskell's \texttt{mtl} library \todo{cite}. If a class has no parent, as is the case with $\mathit{MList}$, then it is a transformer over the $\mathit{Identity}$ monad. If a class has a parent, such as $\mathit{SList}$, then the $\mathit{Identity}$ monad is replaced with the state monad transformer corresponding to its parent class:
+\begin{displaymath}
+\begin{array}{lcl}
+\mathbf{type}~\mathit{MList}~a & = & \mathit{StateT}~(\mathit{MListState}~a)~\mathit{Identity} \\
+\mathbf{type}~\mathit{SList}~a & = & \mathit{StateT}~(\mathit{SListState}~a)~(\mathit{MList}~a)
+\end{array}
+\end{displaymath}
+State transformers are functions which accept an initial state as argument and return a result as well as an updated state. The state monad captures this effect and state monad transformers allow state monads to be layered on top of other monads. The resulting \emph{monad stacks} have all of their monads' effects layered on top of each other. Therefore, a stack of state monad transformers will propagate the state of each layer.
 
-Encoding an object class in standard Haskell yields several components. Firstly, we define a single-constructor data type to represent the state of an object. For example, for the $\mathit{SList}$ class, we have the following:
+For this reason, the data type representing the state of a sub-class does not include any fields inherited from its parent(s):
 \begin{displaymath}
 \begin{array}{lcl}
 \mathbf{data}~\mathit{SListState}~a & = & \mathit{MkSListState}~\{~ \_ slist \_ pred :: a \to a \to \mathit{Bool}~\}
 \end{array}
 \end{displaymath}
-Note that this does not include any state inherited from the $\mathit{MList}$ class.
+\todo{I am not really happy with following paragraph}
+We use a multi-parameter type class together with functional dependencies \todo{cite} to represent the interface of an object class. We can further divide such an interface into groups of \emph{external} and \emph{internal} methods. Each method of an object class has a corresponding function in both groups. While both groups are part of the same type class, the internal interface is used when the call-site is a method within the same object class. The external methods can be called on objects from all other call-sites, such as \emph{e.g.} pure code. They are responsible for unfolding an object into a stack of state monad transformers, invoking the corresponding internal method on the stack, and then folding the updated state back into an object. \todo{hylomorphism?} For example, the following is part\todo{a partial definition?} of the type class for $\mathit{MList}$: 
+\begin{displaymath}
+\begin{array}{l}
+\mathbf{class}~\mathit{Monad}~m \Rightarrow \mathit{MListLike}~e~s~m~a \mid e \to s, s \to e~\mathbf{where} \\
+\quad \begin{array}{lcl}
+\mathit{\_ \mathit{get}\_\mathit{list}\_\mathit{root}} & :: & e~a \to m~(\mathit{Maybe}~(\mathit{MListItemObject~a}),e~a) \\
+\mathit{insert} & :: & e~a \to a \to m~((),e~a) \\
+\_\mathit{insert} & :: & a \to \mathit{StateT}~(s~a)~m~()
+\end{array}
+\end{array}
+\end{displaymath}
+\todo{The rest of this section is only outlining the structure so far and lacks lots of details}
+Each type class belonging to an object class has at least three parameters: $e$ is the ..., $s$ is the data type describing the state, and $m$ is the monad \todo{I want to say context so badly} in which methods of this type class can be invoked in. Additionally, there is one type parameter for each type parameter of the object class, which is $a$ for $\mathit{MList}$.
 
-
-
-
-\includegraphics{images/figures-figure0.eps}
+We combine all of the above to define a data type for objects belonging to an object class. The value representation of an object is reminiscent of a functional zipper.
 
 \begin{displaymath}
 \begin{array}{lcl}
-\mathbf{data}~\mathit{MutableListState}~a & = & \mathit{MkMutableListState}~\{  \} \\
-\mathbf{data}~\mathit{MutableListObject}~a & = & \\
- & \mid & \forall s~d\\
-\mathbf{type}~\mathit{MutableList}~a & = & \mathit{StateT}~()~\mathit{Identity}
+\mathbf{data}~\mathit{MListObject}~a & = & \mathit{MListData}~\{ \\ 
+ & & \quad \_\mathit{list}\_\mathit{data} :: \mathit{MListState}~a\\
+ & & \} \\
+ & \mid & \forall s~d.\mathit{MListLike}~s~d~(\mathit{MList}~a)~a \Rightarrow \mathit{MListStart}~\{\\
+ & & \quad \begin{array}{lcl}
+ \_\mathit{list}\_\mathit{data} & :: & \mathit{MListState}~a, \\
+ \_\mathit{list}\_\mathit{sub}  & :: & s~a
+ \end{array}\\
+ & & \}
+\end{array}
+\end{displaymath}
+An $\mathit{MList}$ object has two possible states: either it is an instance of $\mathit{MList}$ or it is an instance of a sub-class of $\mathit{MList}$ which has been cast to $\mathit{MList}$.
+
+\begin{displaymath}
+\begin{array}{lcl}
+\mathit{newMList} & :: & \mathit{MListObject}~a \\
+\mathit{newMList} & = & \mathit{MListData}~\{~\_\mathit{list}\_\mathit{data} = \mathit{MkMListState}~\{\\ 
+&& \quad \_\mathit{list}\_\mathit{root} = \mathit{Nothing}\\
+&& \}~\}
 \end{array}
 \end{displaymath}
 
 \begin{displaymath}
 \begin{array}{l}
-\mathbf{class}~\mathit{Monad}~m \Rightarrow \mathit{MutableListLike}~e~s~m~a \mid e \to s, s \to e~\mathbf{where} \\
+\mathbf{instance}~\mathit{MListLike}~\mathit{MListObject}~\mathit{MListState}~\mathit{Identity}~a~\mathbf{where} \\
 \quad \begin{array}{lcl}
-\mathit{\textunderscore get \textunderscore list \textunderscore root} & :: & e~a \to m~(\mathit{Maybe}~(\mathit{MutableListItemObject~a}),e~a) \\
-\mathit{insert} & :: & e~a \to a \to m~((),e~a) \\
-\mathit{insert}' & :: & a \to \mathit{StateT}~(s~a)~m~()
+\mathit{insert}~(\mathit{MListData}~d)~v & = & \mathbf{do} \\
+\multicolumn{3}{l}{\quad \begin{array}{lcl}
+(r,d') & \leftarrow & \mathit{runStateT}~(\_\mathit{insert}~v)~d \\
+\multicolumn{3}{l}{\mathit{return}~(r,\mathit{MListData}~d')}
+\end{array}} \\
+\mathit{insert}~(\mathit{MListStart}~d~s)~v & = & \mathbf{do} \\
+\multicolumn{3}{l}{\quad \begin{array}{lcl}
+((r,s'),d') & \leftarrow & \mathit{runStateT}~(\mathit{insert}~s~v)~d \\
+\multicolumn{3}{l}{\mathit{return}~(r,\mathit{MListStart}~d'~s')}
+\end{array}} \\
+\_\mathit{insert} & = & \mathit{list}\_\mathit{insert}
 \end{array}
 \end{array}
 \end{displaymath}
 
+%\includegraphics{images/figures-figure0.eps}
+
 \begin{figure}
 \begin{center}
 \begin{tabular}{|c|c|c|c|}
-\hline  & Base & Abstract & Final \\ 
-\hline zipper alignment &  &  &  \\ 
-\hline  &  &  &  \\ 
-\hline  &  &  &  \\ 
-\hline  &  &  &  \\ 
+\hline \emph{Base class} & None & Abstract & Final \\ 
+\hline data &  &  &  \\ 
+\hline data,sub &  &  &  \\ 
+\hline sup,data &  &  &  \\ 
+\hline sup,data,sub &  &  &  \\ 
 \hline 
 \end{tabular} 
 \end{center}
-
-\caption{Object constructors}\label{tab:constructors}
+\caption{Object constructors by attribute for base classes}
+\label{tab:baseconstructors}
 \end{figure}
+
+\begin{figure}
+\begin{center}
+\begin{tabular}{|c|c|c|c|}
+\hline \emph{Sub-class} & None & Abstract & Final \\ 
+\hline data &  &  &  \\ 
+\hline data,sub &  &  &  \\ 
+\hline sup,data &  &  &  \\ 
+\hline sup,data,sub &  &  &  \\ 
+\hline 
+\end{tabular} 
+\end{center}
+\caption{Object constructors by attribute for sub-classes}
+\label{tab:childconstructors}
+\end{figure}
+
+
+\begin{itemize}
+\item Different ``zipper'' arrangements depending on base/child, abstract, and final attributes
+\item Type class per object class with 2 functions for each method (external vs. internal call)
+\item Zipper traversal in the function definitions and construction of the monad stack
+\end{itemize}
 
 \section{Casts}
 \label{sec:casts}
 
-We have shown that calling a method on an object sets up a stack of state monad transformers parametrised over each $\delta$-object's state. If the object has the type of a base class, this stack can be set up in order by the dynamic dispatch mechanism. If an object has the type of a sub-class, then this becomes more difficult.
+\todo{This section needs a better title!}
+
+\todo{casting}
+
+We have shown that calling a method on an object sets up a stack of state monad transformers parametrised over each $\delta$-object's state. If the object has the type of a base class, this stack can be set up in order by the dynamic dispatch mechanism. If an object has the type of a sub-class, its value representation will reflect this by having the $\delta$-object corresponding to the sub-class in view. Therefore  then this becomes more difficult.
 
 
 
