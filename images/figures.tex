@@ -7,7 +7,7 @@
 \usetikzlibrary{external}
 \tikzset{external/system call={latex \tikzexternalcheckshellescape -halt-on-error
 -interaction=batchmode -jobname "\image" "\texsource";
-dvips -o "\image".ps "\image".dvi;
+dvips -o "\image".ps "\image".dvi &&
 ps2eps "\image.ps"}}
 \tikzexternalize
 
@@ -16,17 +16,21 @@ ps2eps "\image.ps"}}
 
 
 %
-\tikzstyle{int}=[draw, fill=blue!20, minimum size=2em]
-\tikzstyle{init} = [pin edge={to-,thin,black}]
+\tikzstyle{int}=[draw, minimum size=2em]
+\tikzstyle{init} = [pin edge={thin,gray}]
 
-\begin{tikzpicture}[node distance=2.5cm,auto,>=latex']
-    \node [int, pin={[init]above:$v_0$}] (a) {$\frac{1}{s}$};
-    \node (b) [left of=a,node distance=2cm, coordinate] {a};
-    \node [int, pin={[init]above:$p_0$}] (c) [right of=a] {$\frac{1}{s}$};
-    \node [coordinate] (end) [right of=c, node distance=2cm]{};
-    \path[->] (b) edge node {$a$} (a);
-    \path[->] (a) edge node {$v$} (c);
-    \draw[->] (c) edge node {$p$} (end) ;
+\begin{tikzpicture}[node distance=2.0cm,auto,>=latex']
+    \node [int] (a) {$\mathit{MList}$};
+    \node [int,below=1cm,pin={[init]above:View}] (b) [right of=a] {$\mathit{SList}$};
+    
+    \path[->] (b) edge node {} (a);
+    
+\end{tikzpicture} \\
+
+\begin{tikzpicture}[node distance=2.0cm,auto,>=latex']
+\node [int,pin={[init]above:View}] (c)  {$\mathit{MList}$};
+\node [int,above=1cm] (d) [right of=c] {$\mathit{SList}$};
+\path[->] (c) edge node {} (d);
 \end{tikzpicture}
 
 \end{document}

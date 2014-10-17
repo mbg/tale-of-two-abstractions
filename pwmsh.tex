@@ -21,6 +21,8 @@
 \usepackage{amssymb}
 \setcounter{tocdepth}{3}
 \usepackage{graphicx}
+\usepackage{tikz}
+\usetikzlibrary{arrows}
 
 \usepackage{xcolor}
 \newcommand{\todo}[1]{[{\color{blue}#1}]}
@@ -81,23 +83,25 @@ We present an encoding of an object system in pure Haskell which supports most c
 
 Different programming paradigms evolve independently, but occasionally cross-pollination takes place. Features inherent to the functional paradigm have made their way into object-oriented languages such as \emph{e.g.} C\# and Java. Similarly, work to combine functional and logic programming \todo{not sure what to say about this}.
 
-\todo{Alan: may be confusing for referees with backgrounds in either OO or FUN}
-\todo{Should there be some form of introduction to monads -- in particularly the state monad? Maybe a reference to a good paper?}
-\todo{write short introduction to relevant background topics -- compare with e.g. functional logic programming / OO languages being influenced by FP?}
+%\todo{Alan: may be confusing for referees with backgrounds in either OO or FUN}
+%\todo{Should there be some form of introduction to monads -- in particularly the state monad? Maybe a reference to a good paper?}
+%\todo{write short introduction to relevant background topics -- compare with e.g. functional logic programming / OO languages being influenced by FP?}
 
 It is folklore that dynamic dispatch can be implemented in Haskell with existential types and type classes. In the following example, a value of type $\mathit{Bird}$ is constructed by applying the $\mathit{MkBird}$ constructor to some type $a$ for which there is an instance of the $\mathit{BirdLike}$ type class:
+
 \begin{displaymath}
 \begin{array}{lcl}
 \mathbf{data}~\mathit{Bird} & = & \forall a. \mathit{BirdLike}~a \Rightarrow \mathit{MkBird}~a
 \end{array}
 \end{displaymath}
+
 The $\mathit{Bird}$ type effectively serves as an abstract base class. It is not possible to obtain a value of this type without some other type $a$ which implements $\mathit{BirdLike}$. Any such type can be seen as a subtype of $\mathit{Bird}$ and type-casts to the base class are possible by applying the $\mathit{MkBird}$ constructor. The type class constraint ensures that every subtype has the properties we would expect of, in this example, a bird.
 
 This is an intriguing concept, but is often perceived as an anti-pattern \todo{cite?}. After all, why should we bother with a base class type if we can simply place a type class constraint on every function expecting bird-like arguments and avoid the $\mathit{Bird}$ type all-together?
 
-We answer this question and show how the above concept can be elevated from a neat trick without much practical use to the foundation of an object system for purely-functional languages with a range of benefits \todo{``range of''?}. Specifically, our contributions are:
+We answer this question and show how the above concept can be elevated from a neat trick without much practical use to the foundation of an object system for purely-functional languages with a range of benefits. Specifically, our contributions are:
 \begin{itemize}
-\item We build upon the technique of using existential types combined with type classes to encode a comprehensive object system in Haskell, supporting object classes, inheritance, subtype polymorphism, and non-aliased mutation \todo{adjust this list?}. In Section \ref{sec:usage} we first show how objects in our encoding are used within a standard Haskell program, before describing the encoding itself in Section \ref{sec:encoding}.
+\item We build upon the technique of using existential types combined with type classes to encode a comprehensive object system in Haskell, supporting object classes, inheritance, coercive subtype polymorphism, and non-aliased mutation. In Section \ref{sec:usage} we first show how objects in our encoding are used within a standard Haskell program, before describing the encoding itself in Section \ref{sec:encoding}.
 \item Class hierarchies in our encoding are open for extension in separately-compiled modules. We thereby improve upon \emph{e.g.} open data types and functions \cite{loh2006open} which require whole program compilation.
 \item \todo{Alan: monad stacks?}Monad transformers are infamous \todo{cite?} for requiring programmers to explicitly reference where in a stack of monad transformers a function should be executed. In Haskell, this is accomplished by wrapping a function in a call to $\mathit{lift}$ for every monad in the stack that should be skipped. Our system hides this boilerplate in the dynamic dispatch mechanism. 
 \item In Section \ref{sec:auto}, we propose a simple notation for object classes, following the conventions of object-oriented languages, that can be used by a pre-processor to generate the corresponding encodings in Haskell.
@@ -106,11 +110,14 @@ We answer this question and show how the above concept can be elevated from a ne
 \section{Using the Encoding}
 \label{sec:usage}
 
-Before diving into the mechanics of our encoding, let us consider a couple of \todo{adjust} examples in the notation which we introduce in detail in Section \ref{sec:auto}. 
+\todo{this doesn't flow well after the restructuring}
+
+Before diving into the mechanics of our encoding, let us consider some examples in the notation which we introduce in detail in Section \ref{sec:auto}. 
 
 Our notation includes three new syntactic constructs within expressions. A $\mathit{pattern} <: \mathit{name}$ statement retrieves the current value of the field whose name is given by $\mathit{name}$ and binds it to $\mathit{pattern}$. Conversely, a $\mathit{expr} >: \mathit{name}$ statement sets the value of the $\mathit{name}$ field to that of $\mathit{expr}$. Identifiers containing dots, such as $n.\mathit{insertTo}$ in the example below, invoke a method on an object -- in this case, the $\mathit{insertTo}$ method is invoked on $n$.
 
 We begin with an implementation of OO-style linked lists, for which we define a class of list items containing values of some type $a$.
+
 \begin{displaymath}
 \begin{array}{l}
 \mathbf{state}~\mathit{MListItem}~a~\mathbf{where} \\
@@ -132,9 +139,11 @@ We begin with an implementation of OO-style linked lists, for which we define a 
 \end{array}
 \end{array}
 \end{displaymath}
+
 This declaration introduces a new object class $\mathit{MListItem}$ with two fields, $\mathit{value}$ and $\mathit{next}$, as well as one method named $\mathit{insertTo}$. Note that the explicit typing for this method gives it a pure type, despite having the effect of transforming an object's state. The reason for this design choice is twofold: the effectful type can be inferred from the context in which the method is defined and the corresponding monad is not given a name until we desugar the class definition. % The type of this method may initially seem confusing since we would expect it to return an updated object and the $\mathbf{do}$-notation suggests a monad. This is indeed the case, but since all methods are automatically state transformers belonging to a state monad
 
 For convenience, we define a function to serve as a smart constructor for new $\mathit{MListItem}$ objects below. The $\mathbf{new}$ keyword, followed by the name of an object class, is used to construct the internal structure of the object:
+
 \begin{displaymath}
 \begin{array}{lcl}
 \mathit{mkItem} & :: & a \to \mathit{MListItem}~a \\
@@ -143,6 +152,7 @@ For convenience, we define a function to serve as a smart constructor for new $\
 \end{displaymath}
 
 By setting the $\mathit{next}$ field of a $\mathit{MListItem}$ object to a value other than $\mathit{Nothing}$, elements can be added to the list. A value of $\mathit{Nothing}$ indicates the end of the list. To account for the empty list, we declare a $\mathit{MutableList}$ class which we use as the start of a linked list:
+
 \begin{displaymath}
 \begin{array}{l}
 \mathbf{state}~\mathit{MList}~a~\mathbf{where} \\
@@ -166,7 +176,9 @@ By setting the $\mathit{next}$ field of a $\mathit{MListItem}$ object to a value
 \end{array}
 \end{array}
 \end{displaymath}
+
 We omit the definitions of the $\mathit{insert}$ and $\mathit{toList}$ methods as they follow similar structures as the $\mathit{insertTo}$ method of the $\mathit{MListItem}$ class. The $\mathit{mkItem}$ function can be used to turn the value to insert into a $\mathit{MListItem}$ object. To test our construction, we define a function that, given an OO-style list of integers, inserts a few integers, and finally converts it to a functional list:
+
 \begin{displaymath}
 \begin{array}{lcl}
 \mathit{test} & :: & \mathit{MList}~\mathit{Int} \to [\mathit{Int}]\\
@@ -180,14 +192,17 @@ d & = & \mathit{snd}~(l.\mathit{insert}~24)\\
 \multicolumn{3}{l}{\mathbf{in}~\mathit{fst}~(d.\mathit{toList})}
 \end{array}
 \end{displaymath}
+
 %Note that we assume that the $\mathit{MList}$ class has been extended with a $\mathit{toList}$ function which traverses the OO-style list and returns a corresponding functional list. 
 Applying $\mathit{test}$ to an empty list results in the following reduction:
+
 \begin{displaymath}
 \begin{array}{cl}
  & \mathit{test}~(\mathbf{new}~\mathit{MList}~\mathit{Nothing}) \\
 \Rightarrow & [23,16,42,24]
 \end{array}
 \end{displaymath}
+
 Now suppose that we wish to define a class of lists which are always sorted according to some predicate. Instead of starting from scratch, we define a class $\mathit{SList}$ which derives from $\mathit{MList}$. This is indicated using a notation for inheritance borrowed from C++:
 
 \begin{displaymath}
@@ -216,7 +231,9 @@ p & <: & \mathit{pred} \\
 \end{array}
 \end{array}
 \end{displaymath}
+
 By deriving $\mathit{SList}$ from $\mathit{MList}$, it has inherited all fields and methods of its parent. Additionally, we have added a $\mathit{pred}$ field used to store the predicate according to which the list should be sorted. We have also overriden the definition of $\mathit{insert}$ to use the $\mathit{helper}$ function whose definition is given below to insert a new item at the correct position within the list:
+
 \begin{displaymath}
 \begin{array}{lcl}
 \multicolumn{3}{l}{\mathit{helper} :: a \to (a \to a \to \mathit{Bool}) \to \mathit{MutableListItem}~a \to \mathit{MutableListItem}~a} \\
@@ -233,21 +250,25 @@ By deriving $\mathit{SList}$ from $\mathit{MList}$, it has inherited all fields 
 \multicolumn{3}{l}{\quad \mathbf{else}~\mathit{item}.\mathit{setNext}~(\mathit{Just}~c)}
 \end{array}
 \end{displaymath}
+
 Applying the $\mathit{test}$ function we defined earlier to an $\mathit{SList}$ object directly is not possible. In other words, even though we consider $\mathit{SList}$ to be a subtype of $\mathit{MList}$, an explicit cast must be inserted in the form of a $\mathit{downcast}$ function:
+
 \begin{displaymath}
 \begin{array}{cl}
- & \mathit{test}~(downcast~\$~\mathbf{new}~\mathit{SList}~\mathit{Nothing}~(>)) \\
+ & \mathit{test}~(\mathbf{new}~\mathit{SList}~\mathit{Nothing}~(>)) \\
 \Rightarrow & [16,23,24,42]
 \end{array}
 \end{displaymath}   
+
 Evaluating this expression results in a sorted list. \todo{benefits, biggest potential criticism: a lot of complexity for little (obvious) programming gain}
 
 \section{Encoding}
 \label{sec:encoding}
 
-Our encoding is based on the technique of combining existential types with type classes to implement dynamic dispatch, as described in Section \ref{sec:introduction}. We observe that this basic technique corresponds to an interface in the object-oriented paradigm. It has no state and does not contain any function definitions, but merely serves as a base type for types which implement the methods described by the type class constraint. Values of such types can be ``cast'' to the base type by wrapping them inside the constructor. Therefore, a notation of subtyping exists on the value level as well as on the type level.
+Our encoding is based on the technique of combining existential types with type classes to implement dynamic dispatch, as described in Section \ref{sec:introduction}. We observe that this basic technique corresponds to an interface in the object-oriented paradigm. It has no state and does not implement any methods, but merely serves as a base type for types which implement the methods described by the type class constraint. Values of such types can be ``cast'' to the base type by wrapping them inside the constructor. Therefore, a notation of subtyping exists on the value level as well as on the type level.
 
 We now show how to expand this technique to include mutable state, \todo{complete this list}. Beginning with the state, we define a single-constructor data type to store the data of each object class. For example, for the $\mathit{MList}$ class shown in Section \ref{sec:usage}, we define the following\footnote{For convention, we use a prefix underscore to indicate that a function is only used internally by the encoding.}:
+
 \begin{displaymath}
 \begin{array}{lcl}
 \mathbf{data}~\mathit{MListState}~a & = & \mathit{MkMListState}~\{\\
@@ -255,13 +276,16 @@ We now show how to expand this technique to include mutable state, \todo{complet
  && \}
 \end{array}
 \end{displaymath}
+
 This data type is used as parameter for a state monad transformer from Haskell's \texttt{mtl} library \todo{cite}. If a class has no parent, as is the case with $\mathit{MList}$, then it is a transformer over the $\mathit{Identity}$ monad. If a class has a parent, such as $\mathit{SList}$, then the $\mathit{Identity}$ monad is replaced with the state monad transformer corresponding to its parent class:
+
 \begin{displaymath}
 \begin{array}{lcl}
 \mathbf{type}~\mathit{MList}~a & = & \mathit{StateT}~(\mathit{MListState}~a)~\mathit{Identity} \\
 \mathbf{type}~\mathit{SList}~a & = & \mathit{StateT}~(\mathit{SListState}~a)~(\mathit{MList}~a)
 \end{array}
 \end{displaymath}
+
 State transformers are functions which accept an initial state as argument and return a result as well as an updated state. The state monad captures this effect and state monad transformers allow state monads to be layered on top of other monads. The resulting \emph{monad stacks} have all of their monads' effects layered on top of each other. Therefore, a stack of state monad transformers will propagate the state of each layer.
 
 For this reason, the data type representing the state of a sub-class does not include any fields inherited from its parent(s):
@@ -270,22 +294,55 @@ For this reason, the data type representing the state of a sub-class does not in
 \mathbf{data}~\mathit{SListState}~a & = & \mathit{MkSListState}~\{~ \_ slist \_ pred :: a \to a \to \mathit{Bool}~\}
 \end{array}
 \end{displaymath}
-\todo{I am not really happy with following paragraph}
-We use a multi-parameter type class together with functional dependencies \todo{cite} to represent the interface of an object class. We can further divide such an interface into groups of \emph{external} and \emph{internal} methods. Each method of an object class has a corresponding function in both groups. While both groups are part of the same type class, the internal interface is used when the call-site is a method within the same object class. The external methods can be called on objects from all other call-sites, such as \emph{e.g.} pure code. They are responsible for unfolding an object into a stack of state monad transformers, invoking the corresponding internal method on the stack, and then folding the updated state back into an object. \todo{hylomorphism?} For example, the following is a partial definition of the type class for $\mathit{MList}$: 
+
+%\todo{I am not really happy with following paragraph}
+We use a multi-parameter type class together with functional dependencies \cite{jones2000type} to represent the interface of an object class. We can further divide such an interface into two groups of methods. Each method of an object class has a corresponding function in both groups. While all are part of the same type class, one group is used internally by the encoding when the call-site is a method within the same object class. The other group of methods can be called on objects from all other call-sites, such as \emph{e.g.} pure code. They are responsible for unfolding an object into a stack of state monad transformers, invoking the corresponding internal method on the stack, and then folding the updated state back into an object. For example, the following is a partial definition of the type class for $\mathit{MList}$ showing the two methods corresponding to the $\mathit{insert}$ method in the object class:
+ 
 \begin{displaymath}
 \begin{array}{l}
-\mathbf{class}~\mathit{Monad}~m \Rightarrow \mathit{MListLike}~e~s~m~a \mid e \to s, s \to e~\mathbf{where} \\
+\mathbf{class}~\mathit{Monad}~m \Rightarrow \mathit{MListLike}~o~s~m~a \mid o \to s, s \to o~\mathbf{where} \\
 \quad \begin{array}{lcl}
-\mathit{\_ \mathit{get}\_\mathit{list}\_\mathit{root}} & :: & e~a \to m~(\mathit{Maybe}~(\mathit{MListItemObject~a}),e~a) \\
-\mathit{insert} & :: & e~a \to a \to m~((),e~a) \\
+\_\mathit{get}\_\mathit{list}\_\mathit{root} & :: & o~a \to m~(\mathit{Maybe}~(\mathit{MItemObject~a}), o~a)\\
+\_\mathit{get}\_\mathit{list}\_\mathit{root}' & :: & \mathit{StateT}~(s~a)~m~(\mathit{Maybe}~(\mathit{MItemObject}~a))\\
+\mathit{insert} & :: & o~a \to a \to m~((),o~a) \\
 \_\mathit{insert} & :: & a \to \mathit{StateT}~(s~a)~m~()
 \end{array}
 \end{array}
 \end{displaymath}
-%\todo{The rest of this section is only outlining the structure so far and lacks lots of details}
-Each type class belonging to an object class has at least three parameters: $e$ is the type representing objects, $s$ is the data type describing the state, and $m$ is the monad \todo{I want to say context so badly} in which methods of this type class can be invoked in. Additionally, there is one type parameter for each type parameter of the object class, which is $a$ for $\mathit{MList}$.
 
-We combine all of the above to define a data type for objects belonging to an object class. The value representation of an object is reminiscent of a functional zipper.
+Each type class belonging to an object class has at least three parameters: $o$ is the type representing objects, $s$ is the data type describing the state, and $m$ is the monad in which methods of this type class can be invoked in. Additionally, there is one type parameter for each type parameter of the object class, which is just $a$ for $\mathit{MList}$. The two functional dependencies $o \to s$ and $s \to o$ say that the object and state types are uniquely determined by each other. In other words, a type class instance for $\mathit{MListLike}$ can be selected by Haskell's type inference based solely on a known $o$ or a known $s$.
+
+We combine all of the above to define a data type for objects belonging to an object class. The value representation of an object is reminiscent of a zipper \cite{huet1997zipper}. This data structure is used for the bi-directional traversal of another data structure, such as a list or a tree, and consists of three parts. For \emph{e.g.} a functional list the zipper consists of a list of ancestor elements which have already been traversed, the element which is currently in view, and a list of successor elements which have not been traversed yet. Our encoding of an object is essentially a zipper over a heterogeneous list of partial objects which we will refer to as $\Delta$-objects. 
+
+When an object is constructed, the view of the zipper is placed on the last element in the list -- the $\Delta$-object corresponding to the object class which is being instantiated. Its immediate ancestor is a $\Delta$-object corresponding to its superclass, which in turn may have its superclass as an ancestor, and so on. Such an object can be cast to a superclass by shifting the zipper's view to an ancestor in which case the subclass becomes a successor element (Figure \ref{fig:cast}).
+
+\tikzstyle{int}=[draw, minimum size=2em]
+\tikzstyle{init} = [pin edge={thin,gray}]
+
+\begin{figure}
+\begin{center}
+\bgroup
+\def\arraystretch{1.5}
+\begin{tabular}{ccc}
+\begin{tikzpicture}[node distance=2.0cm,auto,>=latex']
+\node [int] (a) {$\mathit{MList}$};
+\node [int,below=1cm,pin={[init]above:View}] (b) [right of=a] {$\mathit{SList}$};
+\path[->] (b) edge node {} (a);
+\end{tikzpicture} & $\qquad \Leftrightarrow \qquad$ &
+
+\begin{tikzpicture}[node distance=2.0cm,auto,>=latex']
+\node [int,pin={[init]above:View}] (c)  {$\mathit{MList}$};
+\node [int,above=1cm] (d) [right of=c] {$\mathit{SList}$};
+\path[->] (c) edge node {} (d);
+\end{tikzpicture} \\
+$\mathit{SList}$ object & & $\mathit{MList}$ object
+\end{tabular}
+\egroup
+\end{center}
+\caption{Cast between an $\mathit{SList}$ object and an $\mathit{MList}$ object} \label{fig:cast}
+\end{figure}
+
+Each object class has its own object type. The encoding of $\mathit{MList}$ objects is shown below: 
 
 \begin{displaymath}
 \begin{array}{lcl}
@@ -300,7 +357,64 @@ We combine all of the above to define a data type for objects belonging to an ob
  & & \}
 \end{array}
 \end{displaymath}
-An $\mathit{MList}$ object has two possible states: either it is an instance of $\mathit{MList}$ or it is an instance of a sub-class of $\mathit{MList}$ which has been cast to $\mathit{MList}$.
+
+An $\mathit{MList}$ object has two possible states: either it is an instance of $\mathit{MList}$ or it is an instance of a sub-class of $\mathit{MList}$ which has been cast to $\mathit{MList}$. The $\mathit{MListData}$ and $\mathit{MListStart}$ constructors represent these cases respectively. Figure \ref{tab:baseconstructors} shows how class attributes affect which constructors are required.
+
+\begin{figure}
+\begin{center}
+\begin{tabular}{|c|c|c|c|}
+\hline \emph{Base class} & None & Abstract & Final \\ 
+\hline $\mathit{Data}$         & x & x & x \\ 
+\hline $\mathit{Start}$     & x & x & \\
+\hline
+\end{tabular} 
+\begin{tabular}{|c|c|c|c|}
+\hline \emph{Sub-class} & None & Abstract & Final \\ 
+\hline $\mathit{Data}$         & x &   & x \\ 
+\hline $\mathit{Start}$     & x & x &   \\ 
+\hline $\mathit{End}$     & x &   & x \\ 
+\hline $\mathit{Middle}$ & x & x &   \\ 
+\hline 
+\end{tabular} 
+\end{center}
+\caption{Object constructors by attribute}
+\label{tab:baseconstructors}
+\end{figure}
+
+Subclasses have more possible states because, unlike base class objects, they may have ancestors. For illustration, the encoding of $\mathit{SList}$ objects is given below:
+
+\begin{displaymath}
+\begin{array}{lcl}
+\mathbf{data}~\mathit{SListObject}~a & = & \mathit{SListData}~\{ \\ 
+ & & \quad \_\mathit{slist}\_\mathit{data} :: \mathit{SListState}~a\\
+ & & \} \\
+ & \mid & \forall s~d.\mathit{SListLike}~s~d~(\mathit{SList}~a)~a \Rightarrow \mathit{SListStart}~\{\\
+ & & \quad \begin{array}{lcl}
+ \_\mathit{slist}\_\mathit{data} & :: & \mathit{SListState}~a, \\
+ \_\mathit{slist}\_\mathit{sub}  & :: & s~a
+ \end{array}\\
+ & & \} \\
+ & \mid & \mathit{SListEnd}~\{\\
+  & & \quad \begin{array}{lcl}
+  \_\mathit{slist}\_\mathit{sup}  & :: & \mathit{MListObject}~a, \\
+  \_\mathit{slist}\_\mathit{data} & :: & \mathit{SListState}~a
+  \end{array}\\
+  & & \} \\
+  & \mid & \forall s~d.\mathit{SListLike}~s~d~(\mathit{SList}~a)~a \Rightarrow \mathit{SListMiddle}~\{\\
+   & & \quad \begin{array}{lcl}
+   \_\mathit{slist}\_\mathit{sup}  & :: & \mathit{MListObject}~a, \\
+   \_\mathit{slist}\_\mathit{data} & :: & \mathit{SListState}~a, \\
+   \_\mathit{slist}\_\mathit{sub}  & :: & s~a
+   \end{array}\\
+   & & \}
+\end{array}
+\end{displaymath}
+
+\todo{explanation}
+
+\todo{there should be an explanation of how the casts are implemented here}
+
+Creating new objects requires us to set up the initial zipper configuration.
 
 \begin{displaymath}
 \begin{array}{lcl}
@@ -310,6 +424,8 @@ An $\mathit{MList}$ object has two possible states: either it is an instance of 
 && \}~\}
 \end{array}
 \end{displaymath}
+
+Object types must be made instances of their corresponding type class, as well as of all type classes belonging to their superclases. For example, part of the $\mathit{MListLike}$ instance for $\mathit{MListObject}$ is shown below:
 
 \begin{displaymath}
 \begin{array}{l}
@@ -330,83 +446,54 @@ An $\mathit{MList}$ object has two possible states: either it is an instance of 
 \end{array}
 \end{displaymath}
 
-%\includegraphics{images/figures-figure0.eps}
+The $\mathit{insert}$ method implements part of the dynamic dispatch mechanism. It inspects the state of the object it is called on and calls $\mathit{MList}$'s implementation of $\mathit{insert}$ if it is an instance of $\mathit{MList}$ by setting up a state monad transformer with the object's current state and invoking $\_\mathit{insert}$ in it, before returning an updated object with the resulting state. If if it an instance of some subclass, then $\mathit{insert}$ still sets up the state monad transformer, but calls the subclasses' implementation of $\mathit{insert}$ instead.
 
-\begin{figure}
-\begin{center}
-\begin{tabular}{|c|c|c|c|}
-\hline \emph{Base class} & None & Abstract & Final \\ 
-\hline data         & x & x & x \\ 
-\hline data,sub     & x & x &  \\ 
-\hline sup,data     &  &  &  \\ 
-\hline sup,data,sub &  &  &  \\ 
-\hline 
-\end{tabular} 
-\end{center}
-\caption{Object constructors by attribute for base classes}
-\label{tab:baseconstructors}
-\end{figure}
+\todo{implementation of $\mathit{list}\_\mathit{insert}$}
+\todo{lifting of getters/setters}
 
-\begin{figure}
-\begin{center}
-\begin{tabular}{|c|c|c|c|}
-\hline \emph{Sub-class} & None & Abstract & Final \\ 
-\hline data         & x &   & x \\ 
-\hline data,sub     & x & x &   \\ 
-\hline sup,data     & x &   & x \\ 
-\hline sup,data,sub & x & x &   \\ 
-\hline 
-\end{tabular} 
-\end{center}
-\caption{Object constructors by attribute for sub-classes}
-\label{tab:childconstructors}
-\end{figure}
+Calling a method on an object sets up a stack of state monad transformers parametrised over each $\Delta$-object's state. If the object has the type of a base class, this stack can be set up in order by the dynamic dispatch mechanism. If an object has the type of a sub-class, its value representation will reflect this by having the $\Delta$-object corresponding to the sub-class in view. However, all methods of a subclass require an appropriate monad stack to be set-up before they can be called and cannot be called directly from elsewhere.
 
+To remove this limitation, every subclass has a second set of type class instances for which the underlying monad is $\mathit{Identity}$.
 
-\begin{itemize}
-\item Different ``zipper'' arrangements depending on base/child, abstract, and final attributes
-\item Type class per object class with 2 functions for each method (external vs. internal call)
-\item Zipper traversal in the function definitions and construction of the monad stack
-\end{itemize}
+\todo{second instance}
 
-\section{Casts}
-\label{sec:casts}
+\begin{displaymath}
+\begin{array}{l}
+\mathbf{class}~\mathit{Monad}~m \Rightarrow \mathit{MListLike}~o~s~m~a \mid o \to s, s \to o~\mathbf{where} \\
+\quad \begin{array}{lcl}
+\_\mathit{list}\_\mathit{invoke} & :: & \mathit{MListLike}~o'~d'~(\mathit{StateT}~(s~a)~m)~a \Rightarrow\\
+                                 &    & o'~a \to (o'~a \to \mathit{StateT}~(s~a)~m~(r,o'~a)) \to\\
+                                 &    & o~a \to m~(r,o~a,o'~a)
+\end{array} 
+\end{array}
+\end{displaymath}
 
-\todo{This section needs a better title!}
-
-\todo{casting}
-
-We have shown that calling a method on an object sets up a stack of state monad transformers parametrised over each $\delta$-object's state. If the object has the type of a base class, this stack can be set up in order by the dynamic dispatch mechanism. If an object has the type of a sub-class, its value representation will reflect this by having the $\delta$-object corresponding to the sub-class in view. Therefore  then this becomes more difficult.
-
-
-
-\begin{itemize}
-\item internal $\mathit{invoke}$ function which uses the zipper to construct a monad stack from an arbitrary focus
-\end{itemize}
+\todo{implementation of $\mathit{list}\_\mathit{invoke}$}
 
 \section{Auto-generation}
 \label{sec:auto}
 
 \begin{itemize}
-\item translation rules for notation to standard Haskell
+\item translation rules object classes
+\item translation rules for methods / functions
 \end{itemize}
 
 \section{Related Work}
 \label{sec:related}
 
-\todo{Relevant parts from my thesis proposal:}
+%\todo{Relevant parts from my thesis proposal:}
 
 %Effect handlers \citep{plotkin2009handlers}, etc.
 
-Extending Haskell with an object system is not a new idea. A previous attempt\cite{OOHaskell} presents an encoding, but focuses on remaining true to object-oriented programming. As a result, their system is impure and requires IO references to account for mutability and aliasing. \cite{shields2001object} show how to extend Haskell to allow the encoding of object-oriented style overloading. Their goal is to allow Haskell programs to provide interfaces to libraries written in object-oriented languages, but not to write object-oriented style code in Haskell itself.
+Extending Haskell with an object system is not a new idea. A previous attempt at encoding an object system in Haskell \cite{OOHaskell} emphasises an exact implementation of the key features of the object-oriented paradigm. As a result, their system is impure and requires memory references to account for mutability and aliasing. \cite{shields2001object} show how to extend Haskell to allow the encoding of object-oriented style overloading. Their goal is to allow Haskell programs to provide interfaces to libraries written in object-oriented languages, but not to write object-oriented style code in Haskell itself.
 
-In more theoretical work, \cite{Pierce93simpletype-theoretic} present a typed $\lambda$-calculus with support for encapsulation, message passing, subtyping, and inheritance. Methods in this calculus are state transformers, but they do not form stacks of state monad transformers. Instead, methods simply use the object as state as in traditional object-oriented programming.
+%In more theoretical work, \cite{Pierce93simpletype-theoretic} present A typed $\lambda$-calculus with support for encapsulation, message passing, subtyping, and inheritance is presented by. Methods in this calculus are state transformers, but they do not form stacks of state monad transformers. Instead, methods simply use the object as state as in traditional object-oriented programming.
 
-The expression problem\cite{wadler1998expression} is concerned with extending programs with new functionality without having to change any of the existing code. A classical example of this is wishing to extend an expression language which supports basic arithmetic expressions with new forms of expressions which add \emph{e.g.} support for exceptions.  
+The expression problem \cite{wadler1998expression} is concerned with extending programs with new functionality without having to change any of the existing code. A classical example of this is wishing to extend an expression language which supports basic arithmetic expressions with new forms of expressions which add \emph{e.g.} support for exceptions.  
 
-In object-oriented programming languages this can be accomplished using an abstract class for expressions which all forms of expressions derive from. Our system allows for similar implementations. However, other approaches exist for Haskell. Open data types and functions\cite{loh2006open} is a proposed extension for Haskell which enables data types and functions to be marked as ``open''. This keyword allows new constructors and equations to be added after an initial declaration. This is accomplished by generating normal data types and functions from all open declarations within a program. This approach has the advantage that it does not introduce any new concepts to the language. However, it does require whole-program compilation and changes to the order in which pattern matching occurs.
+In object-oriented programming languages this can be accomplished using an abstract class for expressions which all forms of expressions derive from. Our system allows for similar implementations. However, other approaches exist for Haskell. Open data types and functions \cite{loh2006open} is a proposed extension for Haskell which enables data types and functions to be marked as ``open''. This keyword allows new constructors and equations to be added after an initial declaration. This is accomplished by generating normal data types and functions from all open declarations within a program. This approach has the advantage that it does not introduce any new concepts to the language. However, it does require whole-program compilation and changes to the order in which pattern matching occurs.
 
-Modular data types can be constructed in Haskell without any new extensions to Haskell's type system using the data types \`a la carte technique\cite{swierstra2008data}. This approach has been used to construct \emph{e.g.} modular compilers\cite{day2012towards}. Unlike open data types, it does not require whole-program compilation, but its barrier to entry is also higher \todo{why?}. 
+Modular data types can be constructed in Haskell without any new extensions to Haskell's type system using the data types \`a la carte technique \cite{swierstra2008data}. This approach has been used to construct \emph{e.g.} modular compilers \cite{day2012towards}. Unlike open data types, it does not require whole-program compilation, but its barrier to entry is also higher \todo{why?}. 
 
 \cite{jaskelioff2011monatron} shows a monad transformer library called \emph{Monatron} which features an improved lifting mechanism at the cost of increased implementation complexity. \cite{schrijvers2011monads} describe \emph{monad zippers} and \emph{monad views} which are used to hide and address parts of monad stacks, respectively.
 
@@ -415,11 +502,11 @@ The most promising solution so far has been presented in \cite{kiselyov2013exten
 \section{Conclusion and Future Work}
 \label{sec:conclusions}
 
-We have shown how to encode an object system in pure Haskell, built on top of monad transformers. Additionally, we have proposed a notation which can be desugared. In addition to providing the advantages of the object-oriented paradigm within a functional setting, we have also seen other benefits.
+We have shown how to encode an object system in pure Haskell, built on top of monad transformers. Additionally, we have proposed a notation resembling class definitions in object-oriented languages which can be desugared into our encoding by a pre-processor. This allows programmers who have experience with the object-oriented style programming to write modular programs in a purely functional language in a familiar style. In addition to providing the advantages of the object-oriented paradigm within a functional setting, we have also seen other benefits.
 
 The dynamic dispatch mechanism hides calls to the $\mathit{lift}$ function of monad transformers from the programmer, while also allowing more fine-grained control. Each layer of a monad stack is mapped to a corresponding class. Overriding a method in one class can be used to intercept calls from sub-classes. We believe that this is a powerful representation of monad transformers which, if generalised to monads other than the state monad, would allow us to reduce the amount of boilerplate which is currently required.
 
-A major limitation of our encoding is the lack of aliasing. While aliasing is often considered a key feature of object-oriented programming, it requires references to an object to be shareable so that an update through one can be observed through the others -- a side effect. In impure languages, this is accomplished by storing all objects in a global heap, but this makes reasoning about such programs difficult. A good compromise may be the introduction of localised heaps which are shared between all functions which possess an alias to the same object. 
+A major limitation of our encoding is the lack of aliasing. While aliasing is often considered a key feature of object-oriented programming, it requires references to an object to be shareable so that an update through one can be observed through the others -- a side effect. In impure languages, this is accomplished by storing all objects in a global heap, but this makes reasoning about such programs difficult. A good compromise may be the introduction of localised heaps which are shared between all functions which possess an alias to the same object. This may be accomplished with the help of the $\mathit{ST}$ monad \cite{launchbury1995state} which provides local, mutable state in Haskell. Such a system would not only improve our encoding, but can be applied to object-oriented languages as well \cite{hogg1992geneva}.  
 
 \todo{paragraph about efficient compilation}
 
@@ -433,11 +520,17 @@ Day, Laurence~E. \& Hutton, Graham.
 \newblock In \emph{Trends in Functional Programming}, pages 49--64. Springer,
   2012.
 
+\bibitem{hogg1992geneva} Hogg, J., Lea, D., Wills, A., deChampeaux, D., Holt, R.: The Geneva convention on the treatment of object aliasing. ACM SIGPLAN OOPS Messenger 3, 11--16 (1992).
+
+\bibitem{huet1997zipper} Huet, G.: Functional Pearl: The zipper. J. Funct. Program. 7, 549--554 (1997).
+
 \bibitem{jaskelioff2011monatron}
 Jaskelioff, Mauro.
 \newblock Monatron: An extensible monad transformer library.
 \newblock In \emph{Implementation and Application of Functional Languages},
   pages 233--248. Springer, 2011.
+  
+\bibitem{jones2000type} Jones, M. P.: Type classes with functional dependencies. Program. Lang. Syst. 230--244 (2000)
   
 \bibitem{OOHaskell}
   Kiselyov, Oleg \& L{\"a}mmel, Ralf.
@@ -457,6 +550,8 @@ L{\"o}h, Andres \& Hinze, Ralf.
 \newblock In \emph{Proceedings of the 8th ACM SIGPLAN international conference
   on Principles and practice of declarative programming}, pages 133--144. ACM,
   2006.
+  
+\bibitem{launchbury1995state} Launchbury, J., Peyton Jones, S. L.: State in Haskell. LISP Symb. Comput. 8, 293--341 (1995)
 
 \bibitem{plotkin2009handlers}
 Plotkin, Gordon \& Pretnar, Matija.
@@ -485,6 +580,8 @@ Swierstra, Wouter.
 Wadler, Philip.
 \newblock The expression problem.
 \newblock \emph{Java-genericity mailing list}, 1998.
+
+
 
 %\bibitem{jour} Smith, T.F., Waterman, M.S.: Identification of Common Molecular
 %Subsequences. J. Mol. Biol. 147, 195--197 (1981)
