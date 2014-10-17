@@ -81,8 +81,20 @@ We present an encoding of an object system in pure Haskell which supports most c
 \section{Introduction}
 \label{sec:introduction}
 
-Different programming paradigms evolve independently, but occasionally cross-pollination takes place. Features inherent to the functional paradigm have made their way into object-oriented languages such as \emph{e.g.} C\# and Java. Similarly, work to combine functional and logic programming \todo{not sure what to say about this}.
+Different programming paradigms evolve independently, but occasionally cross-pollination takes place. Features characteristic of the functional paradigm (e.g.\ lazy streams, higher-order functions) have made their way into object-oriented languages such as \emph{e.g.} C\# and Java 8. Often this cross-pollination highlights other issues, e.g.\ that immutability is useful for such constructs but hard to express in Java. Similarly, work combining functional and logic programming
+(e.g.\ $\lambda$prolog, Curry, Mercury) helped us better understand interactions of backtracking and laziness, and higher-order functions and unification.
 
+In this work, we encode object-oriented features in a purely functional language
+(Haskell for concreteness).  Doing so not only allows programmers to
+explore new ways of structuring functional programs,
+but also casts light in the opposite
+direction---adding a new point in the old object-oriented debate
+concerning the difference between subtyping and inheritance.
+
+For convenience, we present syntactic sugar for our object system on top of standard Haskell. This de-sugars back to pure Haskell and monads in a way entirely
+parallel to the way that Haskell's $\mathbf{do}$-notation does for imperative code.
+
+% We address the key concepts of the object-oriented paradigm in our system.
 %\todo{Alan: may be confusing for referees with backgrounds in either OO or FUN}
 %\todo{Should there be some form of introduction to monads -- in particularly the state monad? Maybe a reference to a good paper?}
 %\todo{write short introduction to relevant background topics -- compare with e.g. functional logic programming / OO languages being influenced by FP?}
@@ -97,13 +109,13 @@ It is folklore that dynamic dispatch can be implemented in Haskell with existent
 
 The $\mathit{Bird}$ type effectively serves as an abstract base class. It is not possible to obtain a value of this type without some other type $a$ which implements $\mathit{BirdLike}$. Any such type can be seen as a subtype of $\mathit{Bird}$ and type-casts to the base class are possible by applying the $\mathit{MkBird}$ constructor. The type class constraint ensures that every subtype has the properties we would expect of, in this example, a bird.
 
-This is an intriguing concept, but is often perceived as an anti-pattern \todo{cite?}. After all, why should we bother with a base class type if we can simply place a type class constraint on every function expecting bird-like arguments and avoid the $\mathit{Bird}$ type all-together?
+This is an intriguing concept, but is often perceived as an anti-pattern. After all, why should we bother with a base class type if we can simply place a type class constraint on every function expecting bird-like arguments and avoid the $\mathit{Bird}$ type all-together?
 
 We answer this question and show how the above concept can be elevated from a neat trick without much practical use to the foundation of an object system for purely-functional languages with a range of benefits. Specifically, our contributions are:
 \begin{itemize}
 \item We build upon the technique of using existential types combined with type classes to encode a comprehensive object system in Haskell, supporting object classes, inheritance, coercive subtype polymorphism, and non-aliased mutation. In Section \ref{sec:usage} we first show how objects in our encoding are used within a standard Haskell program, before describing the encoding itself in Section \ref{sec:encoding}.
 \item Class hierarchies in our encoding are open for extension in separately-compiled modules. We thereby improve upon \emph{e.g.} open data types and functions \cite{loh2006open} which require whole program compilation.
-\item \todo{Alan: monad stacks?}Monad transformers are infamous \todo{cite?} for requiring programmers to explicitly reference where in a stack of monad transformers a function should be executed. In Haskell, this is accomplished by wrapping a function in a call to $\mathit{lift}$ for every monad in the stack that should be skipped. Our system hides this boilerplate in the dynamic dispatch mechanism. 
+\item Monad transformers \cite{moggi} are infamous \todo{cite?} for requiring programmers to explicitly reference where in a stack of monad transformers a function should be executed. In Haskell, this is accomplished by wrapping a function in a call to $\mathit{lift}$ for every monad in the stack that should be skipped. Our system hides this boilerplate in the dynamic dispatch mechanism. 
 \item In Section \ref{sec:auto}, we propose a simple notation for object classes, following the conventions of object-oriented languages, that can be used by a pre-processor to generate the corresponding encodings in Haskell.
 \end{itemize}
 
@@ -260,7 +272,7 @@ Applying the $\mathit{test}$ function we defined earlier to an $\mathit{SList}$ 
 \end{array}
 \end{displaymath}   
 
-Evaluating this expression results in a sorted list. \todo{benefits, biggest potential criticism: a lot of complexity for little (obvious) programming gain}
+Evaluating this expression results in a sorted list. This example shows how, using a familiar notation, a program can first be constructed and then extended without having to modify any of the initial code. In addition, we have a convenient means of working with the effect of mutable state.
 
 \section{Encoding}
 \label{sec:encoding}
@@ -453,9 +465,26 @@ The $\mathit{insert}$ method implements part of the dynamic dispatch mechanism. 
 
 Calling a method on an object sets up a stack of state monad transformers parametrised over each $\Delta$-object's state. If the object has the type of a base class, this stack can be set up in order by the dynamic dispatch mechanism. If an object has the type of a sub-class, its value representation will reflect this by having the $\Delta$-object corresponding to the sub-class in view. However, all methods of a subclass require an appropriate monad stack to be set-up before they can be called and cannot be called directly from elsewhere.
 
-To remove this limitation, every subclass has a second set of type class instances for which the underlying monad is $\mathit{Identity}$.
+Figure \ref{fig:subinvoke} shows the process by which our encoding removes this limitation. When a method is invoked on a subclass object, the call gets forwarded to along the ancestors of the zipper to until it reaches the base class using a function named $C\_\mathit{invoke}$ for a class named $C$. The definition of this function is given later in this section. Once the base class object has been reached, it can then construct the monad stack from the bottom up as if a method was called on the base class object itself.
 
-\todo{second instance}
+\begin{figure}
+\begin{center}
+\begin{tikzpicture}[node distance=5.0cm,auto,>=latex']
+\node [int] (c)  {$\mathit{MList}$};
+\node [int,pin={[init]above:View}] (d) [right of=c] {$\mathit{SList}$};
+\node (b) [below of=d,node distance=1cm, coordinate] {a};
+
+\path[->] ([yshift=1ex]c.east) edge node {$\mathit{runStateT~insert}$} ([yshift=1ex]d.west);
+\path[->] ([yshift=-1ex]d.west) edge node {$\mathit{list}\_\mathit{invoke}~\mathit{insert}$} ([yshift=-1ex]c.east);
+\path[->] (b.north) edge node [right] {$\mathit{obj.insert}$} (d.south);
+\end{tikzpicture} 
+\end{center}
+\caption{Invoking $\mathit{insert}$ on an $\mathit{SList}$ object $\mathit{obj}$} \label{fig:subinvoke}
+\end{figure}
+
+\todo{BTW: I think there may be an interesting connection to coeffects here, since we get Haskell's type inference to select a type class instance depending on the context in which a method is called (e.g. if the method is called from another method in the same class, the context is already what the method expects and it can simply be invoked, while in other cases the alternative implementation is called which then sets up the right ``context'')}
+
+This process requires a second instance of the type class belonging to a subclass where the underlying monad is the $\mathit{Identity}$ monad as opposed to the parent class's state monad. Methods in such an instance call their parents $\mathit{invoke}$ function with themselves as argument.
 
 \begin{displaymath}
 \begin{array}{l}
@@ -473,15 +502,108 @@ To remove this limitation, every subclass has a second set of type class instanc
 \section{Auto-generation}
 \label{sec:auto}
 
-\begin{itemize}
-\item translation rules object classes
-\item translation rules for methods / functions
-\end{itemize}
+Encoding object classes for our system by hand is both repetitive and error-prone. We propose syntactic sugar resembling familiar notations used by object-oriented languages to automatically generate the corresponding encodings. Object classes are modelled using $\mathbf{state}$ declarations. The following is an overview of the structure of such a declaration:
+
+\begin{displaymath}
+\begin{array}{l}
+[\mathbf{abstract} \mid \mathbf{final}]~\mathbf{state}~\mathit{C}~\overline{\mathit{tyvar}}~[: P~\overline{\mathit{type}}]~\mathbf{where} \\
+\quad \overline{\mathbf{data}~\mathit{var}~[= \mathit{expr}] :: \mathit{type}} \\
+\quad \overline{[\mathbf{abstract}]~\mathit{var} :: \mathit{type}} \\
+\quad \overline{\mathit{equation}}
+\end{array}
+\end{displaymath}
+
+The $\mathbf{state}$ keyword is optionally preceded by either an $\mathbf{abstract}$ or $\mathbf{final}$ modifier, but cannot have both. If the $\mathbf{abstract}$ modifier is specified, the class cannot be instantiated directly, but it may include method typings marked as $\mathbf{abstract}$ which do not have an accompanying binding. A class which inherits from an abstract class must implement all abstract methods unless it is abstract itself. If a class is marked as $\mathbf{final}$, then no other class can inherit from it.
+
+The name of an object class $C$ follows the conventions for type constructors\footnote{In Haskell, this means that the name must start with an upper-case character.} and is followed by zero or more type variables. The optional $: \mathit{P}~\overline{\mathit{type}}$ component of the header of the declaration is used to specify the class's parent. $P$ must be the name of a non-final object class. There must be as many $\mathit{type}$s as there are type parameters in $P$'s definition. Any type variables used here must first be declared as type parameters of $C$.
+
+The body of an object class declaration following the $\mathbf{where}$ keyword consists of three types of definitions which may appear in any order. A line starting with the $\mathbf{data}$ keyword is used to declare a field and must consist of at least a name and a type, but may optionally have an expression describing its default value. If no default value is specified, then it is assumed to be $\bot$. The fields in the object class declaration are desugared into fields for the state date type: 
+
+\begin{displaymath}
+\begin{array}{lcl}
+\mathbf{data}~\mathit{CState}~\overline{\mathit{tyvar}} & = & \mathit{MkCState}~\{~\overline{\_\mathit{var} :: \mathit{type}}~\}
+\end{array}
+\end{displaymath}
+
+The names of this data type and its single constructor can be chosen arbitrarily, since they are never exposed directly to the user. However, for consistency, we have used the name of the object class followed by $\mathit{State}$ for the name of the data type and $\mathit{Mk}$, followed by the name of the data type, for the constructor. This data type is parametrised over the same type parameters as $C$. The type alias for the state monad transformer parametrised over $\mathit{CState}$ follows:
+
+\begin{displaymath}
+\begin{array}{lcl}
+\mathbf{type}~\mathit{C}~\overline{\mathit{tyvar}} & = & \mathit{StateT}~(\mathit{CState}~\overline{\mathit{tyvar}})~[\mathit{Identity} \mid P~\overline{\mathit{type}}]
+\end{array}
+\end{displaymath}
+
+By convention, the type alias is named after the object class. As with the state data type before, its type parameters are the same as in the header of the declaration for $C$. If the class has a parent, its underlying monad is that corresponding to $P$ applied to the type argument specified in the header of $C$. Otherwise, it is $\mathit{Identity}$. The last new type that results from a declaration for an object class $C$ is the data type representing objects of type $C$:
+
+\begin{displaymath}
+\begin{array}{lcl}
+\mathbf{data}~\mathit{CObject}~\overline{\mathit{tyvar}} & = & \mathit{constructors}
+\end{array}
+\end{displaymath}
+
+Refer to Figure \ref{tab:baseconstructors} for guidance on which constructors are depending on whether $C$ is a subclass or not and which attributes it has. The $\mathit{Middle}$ constructor combines all possible fields which may be required by an object's internal state:
+
+\begin{displaymath}
+\begin{array}{l}
+\forall s~d.\mathit{CLike}~s~d~(\mathit{C}~\overline{\mathit{tyvar}})~\overline{\mathit{tyvar}} \Rightarrow \mathit{CMiddle}~\{\\
+   \quad \begin{array}{lcl}
+   \_\mathit{C}\_\mathit{sup}  & :: & \mathit{PObject}~\overline{\mathit{type}}, \\
+   \_\mathit{C}\_\mathit{data} & :: & \mathit{CState}~\overline{\mathit{tyvar}}, \\
+   \_\mathit{C}\_\mathit{sub}  & :: & s~\overline{\mathit{tyvar}}
+   \end{array}\\
+\}
+\end{array}
+\end{displaymath}
+
+The existentially-quantified type variables $s$ and $d$ as well as the type class constraint are only required if the $\mathit{sub}$ field is present. $s$ refers to the object type of a subclass and $d$ refers to the corresponding state type. The constraint enforces that the subclass must implement all methods of $C$. The $\mathit{sup}$ field is only present in subclasses, but never base classes. Its value is a $\Delta$-object belonging to $P$. Finally, the $\mathit{data}$ field is always present and stores the $\Delta$-object's state.
+
+Method typings and fields are used to construct the type class representing $C$'s interface: 
+
+\begin{displaymath}
+\begin{array}{l}
+\mathbf{class}~[\mathit{Monad}~m \mid \mathit{PLike}~o~s~m~\overline{\mathit{type}}] \Rightarrow \\
+\quad \mathit{CLike}~o~s~m~\overline{\mathit{tyvar}} \mid o \to s, s \to o~\mathbf{where} \\
+\qquad \quad \begin{array}{l}
+\_\mathit{C}\_\mathit{invoke} :: \mathit{CLike}~o'~d'~(\mathit{StateT}~(s~\overline{\mathit{tyvar}})~m) \Rightarrow \\
+\qquad o'~\overline{\mathit{tyvar}} \to (o'~\overline{\mathit{tyvar}} \to \mathit{StateT}~(s~\overline{\mathit{tyvar}})~m~(r,o'~\overline{\mathit{tyvar}})) \to\\\qquad
+                                  o~\overline{\mathit{tyvar}} \to m~(r,o~\overline{\mathit{tyvar}},o'~\overline{\mathit{tyvar}}) \\
+\overline{\_\mathit{get}\_\mathit{field} :: o~\overline{\mathit{tyvar}} \to m~(\mathit{type}, o~\overline{\mathit{tyvar}}) } \\
+\overline{\_\mathit{get}\_\mathit{field}' :: \mathit{StateT}~(s~\overline{\mathit{tyvar}})~m~\mathit{type}} \\
+\overline{\_\mathit{set}\_\mathit{field} :: o~\overline{\mathit{tyvar}} \to \mathit{type} \to m~((),o~\overline{\mathit{tyvar}})} \\
+\overline{\_\mathit{set}\_\mathit{field}' :: \mathit{type} \to \mathit{StateT}~(s~\overline{\mathit{tyvar}})~m~()} \\
+\overline{\mathit{method} :: o~\overline{\mathit{tyvar}} \to \overline{\mathit{arg} \to}~m~(\mathit{result},o~\overline{\mathit{tyvar}})}\\
+\overline{\_\mathit{method} :: \overline{\mathit{arg} \to}~ \mathit{StateT}~(s~\overline{\mathit{tyvar}})~m~\mathit{result} }
+\end{array}
+\end{array}
+\end{displaymath}
+
+For each field, there are two getters and two setters. One pair is used internally for the $<:$ and $>:$ statements and the other is used when invoked on an object. For every method, there are two typings -- one used internally by methods in the same class and one used everywhere else. Additionally, the $\_\mathit{C}\_\mathit{invoke}$ method is used by subclasses to invoke their own methods in a monad stack set up by $C$.
+
+An instance of this type class is generated as well as one for each type class belonging to an ancestor of $C$. Each external method's implementation pattern matches on the configuration of the object, adds a state monad transformer layer on top of the existing monad stack, and then either invokes its own, internal implementation of the method or propagates the call to a subclass.
+
+\todo{example? lifting of getters/setters}
+
+If $C$ is not a base class, a second instance of $\mathit{CLike}$ is generated with the underlying monad set to $\mathit{Identity}$. In this case, all methods use $\_P\_\mathit{invoke}$ on the $\Delta$-object belonging to $P$ to perform the process shown in Figure \ref{fig:subinvoke}:
+
+\begin{displaymath}
+\begin{array}{l}
+\mathbf{instance}~\mathit{CLike}~\mathit{CObject}~\mathit{CState}~\mathit{Identity}~\overline{\mathit{tyvar}}~\mathbf{where}\\
+\quad \begin{array}{lcl}
+\mathit{method}~(\mathit{CEnd}~\mathit{sup}~\mathit{d}) & = & \mathbf{do} \\
+\multicolumn{3}{l}{\quad \begin{array}{lcl}
+(r,sup',\mathit{CEnd}~\_~d') & \leftarrow & \_P\_\mathit{invoke}~(\mathit{CEnd}~\mathit{sup}~d)~\mathit{method}~s \\
+\multicolumn{3}{l}{\mathit{return}~(r, \mathit{CEnd}~sup'~d')}
+\end{array}}
+\end{array}
+\end{array}
+\end{displaymath}
+
+Methods are mostly standard Haskell. $<:$ and $>:$ statements are desugared into calls to the appropriate getters or setters for a field. Method invocations (identifiers containing dots) are rewritten so that the object becomes the first argument of the method and the resulting expression is then wrapped into $\mathit{runIdentity}$.
 
 \section{Related Work}
 \label{sec:related}
 
-%\todo{Relevant parts from my thesis proposal:}
+\todo{This still needs to be improved; some discussion is lacking}
 
 %Effect handlers \citep{plotkin2009handlers}, etc.
 
@@ -552,6 +674,8 @@ L{\"o}h, Andres \& Hinze, Ralf.
   2006.
   
 \bibitem{launchbury1995state} Launchbury, J., Peyton Jones, S. L.: State in Haskell. LISP Symb. Comput. 8, 293--341 (1995)
+
+
 
 \bibitem{plotkin2009handlers}
 Plotkin, Gordon \& Pretnar, Matija.
