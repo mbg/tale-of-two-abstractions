@@ -1,0 +1,23 @@
+
+Base class
+
+This case is simple. If the object is in the `Data' configuration, then it is an
+"honest" object, so we should just run the implementation. If it is in the `Start'
+configuration, then it is really an object constructed using some sub-class that we
+don't know anything about, so we should forward the call to that class's instance.
+
+        | Primary | Primary (Identity) | Parental | Parental (Identity)
+Data    | run     | <-                 | N/A      | N/A
+Start   | forward | <-                 | N/A      | N/A
+Middle  | N/A     | N/A                | N/A      | N/A
+End     | N/A     | N/A                | N/A      | N/A
+
+Sub-class
+
+This case is complicated. 
+
+        | Primary | Primary (Identity) | Parental | Parental (Identity)
+Data    | run     | invoke             | run/lift | invoke/forward
+Start   | forward | Impossible.        | forward  | Impossible.
+Middle  | forward | invoke             | forward  | invoke/forward
+End     | run     | invoke             | run/lift | invoke/forward

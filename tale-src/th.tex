@@ -1,0 +1,106 @@
+\section{Template Haskell}
+\label{sec:th}
+
+\textbf{COPIED FROM OLD VERSION}
+
+We have implemented our system in a Haskell library\footnote{\url{https://github.com/mbg/monadic-state-hierarchies}} which primarily provides a $\mathit{QuasiQuoter}$ \citep{mainland2007s} for our object notation. Multiple state declarations may be included in a single quotation and, indeed, this is necessary if multiple state classes depend on each other. The examples in Section \ref{sec:usage} can be used exactly as shown. For example, for $\mathit{MListItem}$ we write:
+\begin{displaymath}
+\begin{array}{l}
+[\mathit{state}\mid \mathbf{state}~\mathit{MListItem}~a~\mathbf{where} \\
+\quad \begin{array}{lcl}
+\mathbf{data}~\mathit{val} & :: & a \\
+\mathbf{data}~\mathit{next}  & :: & \mathit{Maybe}~(\mathit{MListItem}~a)
+\end{array}\\\\
+\quad \begin{array}{lcl}
+\mathit{insertAtEnd} & :: & \mathit{MListItem}~a \to ()\\
+\mathit{insertAtEnd}~v & = & \mathbf{do} \\
+\multicolumn{3}{l}{\quad \begin{array}{l}
+\mathit{switch}~\mathit{next}~\$~\lambda case \\
+\quad \begin{array}{lcl}
+\mathit{Nothing} & \to & \mathit{next} <: \mathit{Just}~v  \\
+(\mathit{Just}~n) & \to & \mathbf{do} \\
+\multicolumn{3}{l}{\quad \mathit{next} <: \mathit{Just}~(\mathit{object}~(n.!\mathit{insertAtEnd})~v) }
+\end{array}
+\end{array}}
+\end{array}\\\mid]
+\end{array}
+\end{displaymath}
+The quotation is parsed and then translated into an abstract representation of Haskell's syntax, according to the rules shown in Section \ref{sec:auto}. Method typings must be given, similar to type classes. We parse them as standard Haskell, but their co-domains will be wrapped into \emph{e.g.} $\mathit{MListItemM}$ in the example above. Method equations are also parsed as standard Haskell, but there is no need to apply any transformations. 
+
+In order to allow programmers to work with the object classes, our library contains a number of combinators. Most of these combinators operate on \emph{selectors} which are defined as:
+\begin{displaymath}
+\begin{array}{lcl}
+\mathbf{data}~\mathit{Selector}~o~s~m~a~b & = & \mathit{MkMethod}~\{ \\
+\multicolumn{3}{l}{\quad \begin{array}{lcl}
+\mathit{mInternal} & :: & \mathit{a} \to \mathit{StateT}~s~m~b, \\
+\mathit{mExternal} & :: & o \to a \to m~(b,o)
+\end{array}} \\
+\multicolumn{3}{l}{\} \mid \mathit{MkField}~\{} \\
+\multicolumn{3}{l}{\quad \begin{array}{lcl}
+\mathit{fExGet} & :: & o \to m~(b,o), \\
+\mathit{fInGet} & :: & \mathit{StateT}~s~m~b, \\
+\mathit{fExSet} & :: & o \to a \to m~((),o), \\
+\mathit{fInSet} & :: & a \to \mathit{StateT}~s~m~b
+\end{array}} \\
+\multicolumn{3}{l}{\} \mid \mathit{MkCall}~\{} \\
+\multicolumn{3}{l}{\quad \begin{array}{lcl}
+\mathit{cCall} & :: & a \to (b,o)
+\end{array}} \\
+\}
+\end{array}
+\end{displaymath}
+Intuitively, a selector is a record of all functions belonging to a field or method. The $\mathit{MkCall}$ constructor is used to represent selectors which have been applied to an object. For convenience, we define a type alias for fields since their argument and return types will always be the same:
+\begin{displaymath}
+\begin{array}{lcl}
+\mathbf{type}~\mathit{Field}~o~s~m~a & = & \mathit{Selector}~o~s~m~a~a
+\end{array}
+\end{displaymath}
+We enrich the type classes that are generated for object classes with selectors for all fields and methods, using the original names from the state declaration. For example, $\mathit{MListItemLike}$ contains
+\begin{displaymath}
+\begin{array}{l}
+\mathit{val} :: \mathit{MListItemLike}~o~s~m~a \Rightarrow \\
+\qquad \mathit{Field}~(o~a)~(s~a)~m~a \\
+\mathit{next} ::  \mathit{MListItemLike}~o~s~m~a \Rightarrow \\
+\qquad  \mathit{Field}~(o~a)~(s~a)~m~(\mathit{Maybe}~(\mathit{MListItem}~a))\\
+\mathit{insertAtEnd} ::  \mathit{MListItemLike}~o~s~m~a \Rightarrow \\
+\qquad  \mathit{Selector}~(o~a)~(s~a)~m~(\mathit{MListItem}~a)~()\\
+\end{array}
+\end{displaymath}
+in addition to the type class methods shown in Section \ref{sec:auto}. This allows us to use the field and method names directly in any context without any compile-time transformations which resolve them to the appropriate functions. For example, in the instance for $\mathit{MListItem}$, $\mathit{next}$ has the following value:
+\begin{displaymath}
+\mathit{next} = \mathit{MkField} \mathit{\_get\_next} \mathit{\_get\_next}' \mathit{\_set\_next} \mathit{\_set\_next}'
+\end{displaymath}
+When used in \emph{e.g.} the $<:$ operator, the appropriate setter is extracted from the record and applied to the new value for the field:
+\begin{displaymath}
+\begin{array}{l}
+(<:)  ::  \mathit{Monad}~m \Rightarrow \mathit{Field}~o~s~m~\mathit{val} \to \mathit{val} \to \mathit{StateT}~s~m~()\\
+(\mathit{MkField}~\_~\_~\_~s') <: val  =  s val
+\end{array}
+\end{displaymath}
+Objects and selectors can be combined using the $.!$ operator which in turn constructs a new selector which can then be used by one of the combinators. The $.!$ is part of the $\mathit{Object}$ type class which in our implementation is the super class of all objects, instead of $\mathit{Monad}$, although $\mathit{Monad}$ is still the superclass of $\mathit{Object}$:
+\begin{displaymath}
+\begin{array}{l}
+\mathbf{class}~\mathit{Monad}~m \Rightarrow \mathit{Object}~\mathit{obj}~m~\mathbf{where}\\
+\quad (.!) :: \mathit{obj} \to \mathit{Selector}~\mathit{obj}~s~m~\mathit{arg}~\mathit{ret} \to \\ \qquad \mathit{Selector}~\mathit{obj}~s~m~\mathit{arg}~\mathit{ret}
+\end{array}
+\end{displaymath}
+There is one instance of this class for all base object classes:
+\begin{displaymath}
+\begin{array}{l}
+\mathbf{instance}~\mathit{Object}~a~\mathit{Identity}~\mathbf{where}\\
+\quad \begin{array}{lcl}
+\mathit{obj}~.!~(\mathit{MkMethod}~\mathit{int}~\mathit{ext}) & = & \\
+\multicolumn{3}{l}{\quad \mathit{MkCall}~ \$~\lambda \mathit{arg} \to \mathit{runIdentity}~\$~\mathit{ext}~\mathit{obj}~\mathit{arg} } %\\
+%\mathit{obj}~.!~(\mathit{MkField}~g~\_~s~\_) & = & \\
+% \multicolumn{3}{l}{\quad \mathit{MkCall}~\$~\mathit{const}~\$~\mathit{runIdentity}~\$ ~g~\mathit{obj}}
+\end{array}
+\end{array}
+\end{displaymath}
+For example, if an object is combined with a selector, then we create a wrapper function around the method after applying it to the object. $\mathit{MkCall}$ values are then used by \emph{e.g.} the $\mathit{object}$ and $\mathit{result}$ combinators as follows:
+\begin{displaymath}
+\begin{array}{l}
+\mathit{object} :: \mathit{Selector}~o~s~\mathit{Identity}~\mathit{arg}~\mathit{ret} \to arg \to o\\
+\mathit{object}~(\mathit{MkCall}~\mathit{call})  = \mathit{snd} \circ \mathit{call}
+\end{array}
+\end{displaymath}
+

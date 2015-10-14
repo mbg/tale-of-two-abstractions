@@ -1,0 +1,218 @@
+\input{tale-src/intro.tex}
+\input{tale-src/object.tex}
+\input{tale-src/subtyping.tex}
+\input{tale-src/th.tex}
+\input{tale-src/related.tex}
+\input{tale-src/conclusion.tex}
+
+\section{Motivation}
+\label{sec:usage}
+
+\textbf{THIS NEEDS TO BE MERGED INTO THE OTHER CHAPTERS}
+
+Before diving into the mechanics of our encoding, let us consider some examples of what can be done with it in the notation which we introduce in detail in Section \ref{sec:auto}. % with object-oriented concepts in a functional setting before introducing [it] in detail in Section \ref{sec:auto}
+
+As a simple example, we begin with an implementation of OO-style linked lists, for which we require two object classes. First, we define a class of list items containing values of some type $a$. Such state class declarations consist of three components: 
+\begin{enumerate}
+    \item A head containing the name, parameters and, optionally, parent of the class.
+    \item Field declarations describing the state of instances of the class.
+    \item Methods: functions with implicit access to an instance of the class.
+\end{enumerate}
+The below declaration introduces a new object class $\mathit{MListItem}$ with two fields, $\mathit{val}$ and $\mathit{next}$, as well as one method named $\mathit{insertAtEnd}$. To insert items at the end of an OO-style linked list, we need to traverse the list to find the last element.  $\mathit{insertAtEnd}$ implements this behaviour by inspecting the value of the $\mathit{next}$ field. If its current value is $\mathit{Nothing}$, then it is set to the $\mathit{MListItem}$ object that was provided as argument to the method. Otherwise, it calls $\mathit{insertAtEnd}$ on the current value of $\mathit{next}$.
+\begin{displaymath}
+\begin{array}{l}
+\mathbf{state}~\mathit{MListItem}~a~\mathbf{where} \\
+\quad \begin{array}{lcl}
+\mathbf{data}~\mathit{val} & :: & a \\
+\mathbf{data}~\mathit{next}  & :: & \mathit{Maybe}~(\mathit{MListItem}~a)
+\end{array}\\\\
+\quad \begin{array}{lcl}
+\mathit{insertAtEnd} & :: & \mathit{MListItem}~a \to ()\\
+\mathit{insertAtEnd}~v & = & \mathbf{do} \\
+\multicolumn{3}{l}{\quad \begin{array}{l}
+    \mathit{switch}~\mathit{next}~\$~\lambda case \\
+    \quad \begin{array}{lcl}
+        \mathit{Nothing} & \to & \mathit{next} <: \mathit{Just}~v  \\
+        (\mathit{Just}~n) & \to & \mathbf{do} \\
+            \multicolumn{3}{l}{\quad \mathit{next} <: \mathit{Just}~(\mathit{object}~(n.!\mathit{insertAtEnd})~v) }
+    \end{array}
+    \end{array}}
+\end{array}
+\end{array}
+\end{displaymath}
+Note that the explicit typing for $\mathit{insertAtEnd}$ gives it a pure type, despite having the effect of transforming an object's state. The reason for this design choice is twofold. Firstly, the effectful type can be inferred from the scope in which the method is defined, similarly to the way that class constraints are added implicitly to the methods belonging to a type class. Secondly, the corresponding monad is not given a name until we desugar the class definition, therefore programmers would have to refer to a name that does not occur anywhere in their code. However, if the name that is generated for the monad is predictable, then there is no fundamental reason why the effect cannot be made explicit.
+
+Methods themselves are just regular Haskell functions which make use of combinators provided by our library. The $\mathit{selector} <: \mathit{value}$ operator sets the value of a field indicated by $\mathit{selector}$ to $\mathit{value}$. Field and method names serve as selectors and may be combined using the $.!$ operator. 
+
+Selectors for fields simultaneously refer to both getters and setters. We therefore need to provide them with enough context to determine whether we wish to use the getter or setter. For instance, the $\mathit{switch}$ combinator applied to the $\mathit{next}$ selector in the example below obtains the value of $\mathit{next}$ using the corresponding getter and then passes it on to the second argument. We describe selectors fully in Section \ref{sec:th}.
+
+When methods, such as $\mathit{insertAtEnd}$, are invoked, they always return a pair consisting of a result and an updated object. Since object-oriented languages are generally impure, they can simply mutate an object in-place. In a purely functional setting, we can only do this if the object is contained within the state of a state monad. Therefore, in general, the programmer has to decide whether they want the updated object, the result, or both. We provide combinators, such as $\mathit{object}$ and $\mathit{result}$, to invoke methods identified by a selector and to return either the updated object or the result of the method, respectively.
+
+For convenience, we define a smart constructor\footnote{A user-defined function used to construct new values of some type} for new objects of type $\mathit{MListItem}$ below. The $\mathbf{new}$ function, applied to initial values for the corresponding fields, is used to instantiate an object class. Unlike in most object-oriented languages where the name of the class we wish to instantiate needs to be specified, we rely on Haskell's type inference to do this for us. Note that the explicit typing is not required:
+\begin{displaymath}
+\begin{array}{lcl}
+\mathit{mkItem} & :: & a \to \mathit{MListItem}~a \\
+\mathit{mkItem}~v & = & \mathit{new}~v~\mathit{Nothing}
+\end{array}
+\end{displaymath}
+By setting the $\mathit{next}$ field of a $\mathit{MListItem}$ object to a value other than $\mathit{Nothing}$, elements can be added to the list. A value of $\mathit{Nothing}$ indicates the end of the list. To account for the empty list, we declare a $\mathit{MList}$ class which we use as the start of a linked list:
+\begin{displaymath}
+\begin{array}{l}
+\mathbf{state}~\mathit{MList}~a~\mathbf{where} \\
+\quad \begin{array}{lcl}
+\mathbf{data}~\mathit{root}  & :: & \mathit{Maybe}~(\mathit{MListItem}~a)
+\end{array}\\\\
+\quad \begin{array}{lcl}
+\mathit{insert} & :: & a \to () \\
+%\mathit{insert}~v & = & \mathbf{do} \\
+%\multicolumn{3}{l}{\quad \begin{array}{lcl}
+%\multicolumn{3}{l}{\mathbf{let}}\\
+%\multicolumn{3}{l}{\quad \mathit{item} = \mathit{mkItem}~v} \\
+%\mathit{mr} & <: & \mathit{root} \\
+%\multicolumn{3}{l}{\mathbf{case}~\mathit{mr}~\mathbf{of}} \\
+%\multicolumn{3}{l}{\quad \begin{array}{lcl}
+%\mathit{Nothing} & \to & \mathbf{do}~\mathit{Just}~\mathit{item} >: \mathit{root} \\
+%(\mathit{Just}~r) & \to & \mathbf{do}~\mathit{Just}~(\mathit{snd}~\$~r.\mathit{insertTo}~\mathit{item}) >: \mathit{root}
+%\end{array}}
+%\end{array}}
+\mathit{toList} & :: & [a]
+\end{array}
+\end{array}
+\end{displaymath}
+We omit the definitions of the $\mathit{insert}$ and $\mathit{toList}$ methods as they follow similar structures as the $\mathit{insertTo}$ method of the $\mathit{MListItem}$ class. The $\mathit{mkItem}$ function can be used to turn the value to insert into a $\mathit{MListItem}$ object. To test our construction, we define a function that, given an OO-style list of integers, inserts a few integers, and finally converts it to a functional list:
+\begin{displaymath}
+\begin{array}{lcl}
+\mathit{test} & :: & \mathit{MList}~\mathit{Int} \to [\mathit{Int}]\\
+\mathit{test}~l & = & \mathbf{let} \\
+\multicolumn{3}{l}{\quad \begin{array}{lcl}
+    a & = & \mathit{object}~(l.!\mathit{insert}~23)\\
+    b & = & \mathit{object}~(a.!\mathit{insert}~16)\\
+    c & = & \mathit{object}~(b.!\mathit{insert}~42)\\
+    d & = & \mathit{object}~(c.!\mathit{insert}~24)\\
+    \end{array}}\\
+\multicolumn{3}{l}{\mathbf{in}~\mathit{result}~(d.!\mathit{toList})~()}
+\end{array}
+\end{displaymath}
+Applying $\mathit{test}$ to an empty list results in the following reduction:
+\begin{displaymath}
+\begin{array}{cl}
+& \mathit{test}~(\mathit{new}~\mathit{Nothing}) \\
+\Rightarrow & [23,16,42,24]
+\end{array}
+\end{displaymath}
+Now suppose that we wish to define a class of lists which are always sorted according to some predicate. Instead of starting from scratch, we define a class $\mathit{SList}$ which derives from $\mathit{MList}$. This is indicated using a notation for inheritance borrowed from C++:
+
+\begin{displaymath}
+\begin{array}{l}
+\mathbf{state}~\mathit{SList}~a : \mathit{MList}~a~\mathbf{where} \\
+\quad \begin{array}{lcl}
+\mathbf{data}~\mathit{pred}  & :: & a \to a \to \mathit{Bool}
+\end{array}\\\\
+\quad \begin{array}{lcl}
+\mathit{insert} & :: & a \to ()\\
+\mathit{insert}~v & = & \mathbf{do} \\
+\multicolumn{3}{l}{\quad \begin{array}{lcl}
+    \multicolumn{3}{l}{\mathbf{let}}\\
+    \multicolumn{3}{l}{\quad \mathit{item} = \mathit{mkItem}~v} \\
+    \multicolumn{3}{l}{\mathit{switch}~\mathit{root}~\$~\lambda \mathbf{case}} \\
+    \multicolumn{3}{l}{\quad \begin{array}{lcl}
+        \mathit{Nothing} & \to & \mathit{root} <: \mathit{Just}~\mathit{item}  \\
+        (\mathit{Just}~r) & \to & \mathbf{do} \\
+        \multicolumn{3}{l}{\quad \begin{array}{lcl}
+            p & \leftarrow & \mathit{value}~\mathit{pred} \\
+            \mathit{root} & <: & \mathit{Just}~(\mathit{helper}~v~p~r) 
+            \end{array}}
+        \end{array}}
+    \end{array}}
+\end{array}
+\end{array}
+\end{displaymath}
+By deriving $\mathit{SList}$ from $\mathit{MList}$, it has inherited all fields and methods of its parent. Additionally, we have added a $\mathit{pred}$ field used to store the predicate according to which the list should be sorted. We have also overriden the definition of $\mathit{insert}$ to use a $\mathit{helper}$ function which inserts a new item at the correct position within the list, according to $\mathit{pred}$. The definition of $\mathit{helper}$ is given below. Note that this function does not need to be a member of $\mathit{SList}$.
+\begin{displaymath}
+\begin{array}{lcl}
+\mathit{helper} & :: &  a \to (a \to a \to \mathit{Bool}) \to \\
+& & \mathit{MListItem}~a \to \mathit{MListItem}~a \\
+\mathit{helper}~v~p~i & = & \mathbf{let} \\
+\multicolumn{3}{l}{\quad \begin{array}{lcl}
+    \mathit{rv} & = & \mathit{value}~(i.!\mathit{val}) \\
+    \mathit{item} & = & \mathit{mkItem}~v
+    \end{array}}\\
+\multicolumn{3}{l}{\quad \mathbf{in}~\mathbf{if}~p~v~rv~\mathbf{then}~\mathbf{case}~\mathit{value}~(c.!\mathit{next})~\mathbf{of}} \\
+\multicolumn{3}{l}{\quad \quad \begin{array}{lcl}
+    \mathit{Nothing} & \to & i.\mathit{setNext}~\$~\mathit{Just}~\mathit{item} \\
+    (\mathit{Just}~n) & \to & i.\mathit{setNext}~\$~\mathit{Just}~\$~\mathit{helper}~v~p~n 
+    \end{array}} \\
+\multicolumn{3}{l}{\quad \mathbf{else}~\mathit{item}.\mathit{setNext}~(\mathit{Just}~c)}
+\end{array}
+\end{displaymath}
+Applying the $\mathit{test}$ function we defined earlier to an $\mathit{SList}$ object directly is not possible. In other words, even though we consider $\mathit{SList}$ to be a sub-type of $\mathit{MList}$, an explicit cast must be inserted in the form of a $\mathit{downcast}$ function:
+\begin{displaymath}
+\begin{array}{cl}
+& \mathit{test}~(\mathit{downcast}~(\mathbf{new}~(\mathit{Nothing},(>)))) \\
+\Rightarrow & [16,23,24,42]
+\end{array}
+\end{displaymath}   
+Evaluating this expression results in a sorted list. This example shows how, using a familiar notation, a program can first be constructed and then extended without having to modify any of the initial code. In addition, we have a convenient means of working with the effect of mutable state.
+
+A more useful example is the implementation of the abstract representation and denotational semantics of a simple expression language:
+\begin{displaymath}
+\begin{array}{lcl}
+\multicolumn{3}{l}{e = n \in \mathbb{N} \mid e+e} \\\\
+
+\denote{\cdot} & : & e \to \mathbb{N}\\
+\denote{n} & = & n \\
+\denote{e_0+e_1} & = & \denote{e_0} + \denote{e_1}
+\end{array}
+\end{displaymath}
+In functional languages, the abstract representation of the grammar would normally be defined using an algebraic data type with two constructors, one for each production. In object-oriented languages, the representation consists of an abstract base class with a sub-class for each production. Figure \ref{fig:razor} shows how to write this in our notation.
+\begin{figure}
+\begin{displaymath}
+\begin{array}{l}
+\mathbf{abstract}~\mathbf{state}~\mathit{Expr}~\mathbf{where} \\
+\quad \begin{array}{lcl}
+\mathbf{abstract}~\mathit{eval} & :: & \mathit{Int}
+\end{array} \\\\
+\mathbf{state}~\mathit{Val} : \mathit{Expr}~\mathbf{where} \\
+\quad \begin{array}{lcl}
+\multicolumn{3}{l}{\mathbf{data}~\mathit{val} = 0  :: \mathit{Int}} \\\\
+\mathit{eval} & :: & \mathit{Int} \\
+\mathit{eval} & = & \mathit{value}~\mathit{val}
+\end{array} \\\\
+\mathbf{state}~\mathit{Add} : \mathit{Expr}~\mathbf{where} \\
+\quad \begin{array}{lcl}
+\multicolumn{3}{l}{\mathbf{data}~\mathit{left}  :: \mathit{Expr}} \\
+\multicolumn{3}{l}{\mathbf{data}~\mathit{right}  :: \mathit{Expr}} \\\\
+\mathit{eval} & :: & \mathit{Int} \\
+\mathit{eval} & = & \mathbf{do} \\
+\multicolumn{3}{l}{\quad \begin{array}{lcl}
+    l & \leftarrow & \mathit{result}~(left.!eval)~() \\
+    r & \leftarrow & \mathit{result}~(right.!eval)~() \\
+    \multicolumn{3}{l}{\mathit{return}~(l + r)}
+    \end{array}} 
+\end{array} 
+\end{array}
+\end{displaymath}
+\caption{Expression language}
+\label{fig:razor}
+\end{figure}
+
+We can now construct arbitrary expressions consisting of addition and values with the help of the $\mathit{new}$ function mentioned previously.
+
+If we wish to extend this language with \emph{e.g.} a multiplication operator, then we would normally have to extend the corresponding algebraic data type with an additional constructor and we would also have to add a new case to the evaluation function. This may not be desirable if, for example, both are located in a library. In our system, we can simply add a new object class which inherits from $\mathit{Expr}$ to extend the language and do not have to change any of the existing code:
+\begin{displaymath}
+\begin{array}{l}
+\mathbf{state}~\mathit{Mul} : \mathit{Expr}~\mathbf{where} \\
+\quad \begin{array}{lcl}
+\multicolumn{3}{l}{\mathbf{data}~\mathit{left}  :: \mathit{Expr}} \\
+\multicolumn{3}{l}{\mathbf{data}~\mathit{right}  :: \mathit{Expr}} \\\\
+\mathit{eval} & :: & \mathit{Int} \\
+\mathit{eval} & = & \mathbf{do} \\
+\multicolumn{3}{l}{\quad \begin{array}{lcl}
+    l & \leftarrow & \mathit{result}~(left.!eval)~() \\
+    r & \leftarrow & \mathit{result}~(right.!eval)~() \\
+    \multicolumn{3}{l}{\mathit{return}~(l \times r)}
+    \end{array}} 
+\end{array}
+\end{array}
+\end{displaymath}
+Importantly, $\mathit{Mul}$ objects can be used as arguments for \emph{e.g.} $\mathit{Add}$ objects, even though we did't know about $\mathit{Mul}$ when we declared the $\mathit{Add}$ class.

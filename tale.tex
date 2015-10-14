@@ -21,9 +21,13 @@
 \usepackage{amssymb}
 \setcounter{tocdepth}{3}
 \usepackage{graphicx}
-\usepackage{natbib}
+%\usepackage{natbib}
 \usepackage{tikz}
+%\usepackage{hyperref}
 \usetikzlibrary{arrows}
+
+\newcommand{\citep}[1]{\cite{#1}}
+\newcommand{\citet}[1]{\cite{#1}}
 
 \usepackage{xcolor}
 \newcommand{\todo}[1]{[{\color{blue}#1}]}
@@ -44,7 +48,7 @@
 \mainmatter  % start of an individual contribution
 
 % first the title is needed
-\title{A tale of two abstractions:\\Monad transformers and object-oriented programming}
+\title{A tale of two abstractions:\\Monad transformers and object-orientation}
 
 % Monads: the world's finest object-oriented programming language
 % Exploring object-oriented programming with monads
@@ -86,12 +90,12 @@
 \keywords{Haskell, Monad Transformers, Object-Oriented Programming}
 \end{abstract}
 
-\input{pwmsh-main}
+\input{tale-main}
 
 \subsubsection*{Acknowledgments.} \input{acks}
 
 %TODO: these need to be embedded and properly formatted for the springer format
-\bibliographystyle{abbrvnat}
+\bibliographystyle{abbrv}
 \bibliography{pwmsh}
 
 \end{document}
