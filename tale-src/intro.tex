@@ -19,18 +19,21 @@ Writing an application using just $\mathit{runQuery}$ may be prone to errors, ho
 The model caches all changes we make to the table and only updates the database when we wish to do so. To implement this, we layer the model on top of the database using the state monad transformer $\mathit{StateT}$, creating a \emph{monad stack} in the process:
 \begin{displaymath}
 \begin{array}{lcl}
-\multicolumn{3}{l}{\mathbf{type}~\mathit{DbModel} = \mathit{StateT}~\mathit{Model}~\mathit{Database}}\\\\
+\multicolumn{3}{l}{\mathbf{type}~\mathit{DbModel} = \mathit{StateT}~\mathit{Model}~\mathit{MyDatabase}}\\\\
 \mathit{saveChanges} & :: & \mathit{DbModel}~() \\
 \mathit{saveChanges} & = & \mathbf{do} \\
 \multicolumn{3}{l}{\qquad \begin{array}{lcl}
     m & \leftarrow & \mathit{get} \\
     \multicolumn{3}{l}{\mathbf{let}} \\
     \multicolumn{3}{l}{\qquad \mathit{query} = \ldots} \\
-    \multicolumn{3}{l}{\mathit{lift}~(\mathit{runQuery}~\mathit{query})}
+    \multicolumn{3}{l}{\mathit{lift}~(\mathit{runQuery}~\mathit{query})}\\
+    \multicolumn{3}{l}{\mathit{return}~()}
 \end{array} }
 \end{array}
 \end{displaymath}
-The $\mathit{saveChanges}$ function is responsible for updating the database according to the cached changes. Firstly, it obtains the current state of the model $m$. It then generates a corresponding query, but this process is not important here so that it has been omitted. Lastly, the function calls $\mathit{runQuery}$ with the generated query. Note, however, that we must wrap the call to $\mathit{runQuery}$ in a call to $\mathit{lift}$ since $\mathit{runQuery}$ cannot run directly on the extended monad stack. To use this implementation, we must also write the following:
+The $\mathit{saveChanges}$ function is responsible for updating the database according to the cached changes. Firstly, it obtains the current state of the model $m$. It then generates a corresponding query, but this process is not important here so that it has been omitted. Lastly, the function calls $\mathit{runQuery}$ with the generated query. Note, however, that we must wrap the call to $\mathit{runQuery}$ in a call to $\mathit{lift}$ since $\mathit{runQuery}$ cannot run directly on the extended monad stack. Let us note here that putting two state monads on top of each other is isomorphic to having a single state monad with a pair combining the states. However, we believe that the latter approach makes code less reusable since the $\mathit{runQuery}$ function would be entirely incompatible with the new monad stack and would have to be rewritten. By putting another state monad on top, the old definition can be reused.
+
+To use this implementation, we must also write the following:
 \begin{displaymath}
 \begin{array}{l}
 \mathit{runState}~(\mathit{runStateT}~\mathit{go}~\mathit{emptyModel})~\mathit{initialDatabase} \\
@@ -88,3 +91,5 @@ We answer this question and show how the above concept can be elevated from a ne
     \item We show how to translate from a simple notation for object classes, following the conventions of object-oriented languages, to the corresponding encodings in Haskell (Section \ref{sec:auto}).
     \item This translation is implemented as a Haskell library using Template Haskell combined with a suitable set of combinators (Section \ref{sec:th}).
 \end{itemize}
+
+\textbf{-- END OF OLD INTRODUCTION --}

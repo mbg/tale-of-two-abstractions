@@ -1,3 +1,90 @@
-\section{Object system}
+\section{Monad stacks and object-orientation}
 
-\textbf{THIS NEEDS TO BE WRITTEN FROM SCRATCH }
+Consider the database example from Section 1. As the programmer, we know when writing the $\mathit{saveChanges}$ function that $\mathit{runQuery}$ can be run on a smaller part of our monad stack. \emph{I.e.} it requires the monad stack to be $\mathit{State}~\mathit{SqlDatabase}$, while the monad stack of $\mathit{saveChanges}$ also provides more state on top of that. As a result of this type incompatibility, we must use $\mathit{lift}$ to execute, in this case, the $\mathit{runQuery}$ function on the layer of the monad stack which corresponds to the one expected by $\mathit{runQuery}$. If this layer is multiple levels away from the top of the stack, multiple, successive calls to $\mathit{lift}$ are required.
+
+Let us refer to function calls where a monad stack has already been set up as \emph{internal calls} as opposed to \emph{external calls} where a monad stack has not yet been set up using the required $\mathit{runX}$ functions, such as \emph{e.g.} $\mathit{runStateT}$. We will address external calls later in this section. 
+
+\subsection{Internal calls}
+
+Most monadic computations in Haskell are represented by values of some data type which are combined with $\bind$ and ultimately evaluated by some corresponding $\mathit{runX}$ function. Monad stacks are therefore just nested data types. A monadic computation, such as $\mathit{runQuery}$ returns a value of the data type corresponding to the monad stack it runs on. Since $\mathit{runQuery}$ and $\mathit{saveChanges}$ run on top of different monad stacks, they return values of different, incompatible types. In order to use $\mathit{runQuery}$ on top of the same monad stack as $\mathit{saveChanges}$, it must return a value of the same type. In other words, we really want $\mathit{runQuery}$ to be an overloaded function which returns a value of the data type corresponding to the context in which it is called. Overloading in Haskell is achieved through type classes, so instead of defining $\mathit{runQuery}$ as a global function with a specific type, we should instead define it as part of a type class:
+\begin{displaymath}
+\begin{array}{l}
+\mathbf{class}~\mathit{SqlDatabaseCtx}~m~\mathbf{where}\\
+\qquad \begin{array}{lcl}
+\mathit{runQuery} & :: & \mathit{String} \to m~\mathit{SqlReader}
+\end{array}
+\end{array}
+\end{displaymath}
+This type class has a single parameter $m$ which represents the context in which $\mathit{runQuery}$ should be callable. In other words, $m$ should be the data type which corresponds to a monad stack on top of which $\mathit{runQuery}$ can be run. To restore the old functionality, we must provide an instance for $\mathit{SqlDatabaseCtx}$ for the most basic monad stack on top of which $\mathit{runQuery}$ can be run\footnote{Note that this requires the \texttt{FlexibleInstances} language extension.}:
+\begin{displaymath}
+\begin{array}{l}
+\mathbf{instance}~\mathit{SqlDatabaseCtx}~\mathit{MyDatabase}~\mathbf{where}\\
+\qquad \begin{array}{lcl}
+\mathit{runQuery}~\mathit{query} & = & \ldots
+\end{array}
+\end{array}
+\end{displaymath}
+We once again omit the exact definition of $\mathit{runQuery}$, but it remains unchanged from the previous implementation. In order to call $\mathit{runQuery}$ from the extended monad stack used by $\mathit{saveChanges}$, we need a second instance for its monad stack:
+\begin{displaymath}
+\begin{array}{l}
+\mathbf{instance}~\mathit{SqlDatabaseCtx}~\mathit{DbModel}~\mathbf{where}\\
+\qquad \begin{array}{lcl}
+\mathit{runQuery}~\mathit{query} & = & \mathit{lift}~(\mathit{runQuery}~\mathit{query})
+\end{array}
+\end{array}
+\end{displaymath}
+We can now rewrite the definition of $\mathit{saveChanges}$ to get rid of the explicit call to $\mathit{lift}$:
+\begin{displaymath}
+\begin{array}{lcl}
+\mathit{saveChanges} & :: & \mathit{DbModel}~() \\
+\mathit{saveChanges} & = & \mathbf{do} \\
+\multicolumn{3}{l}{\qquad \begin{array}{lcl}
+    m & \leftarrow & \mathit{get} \\
+    \multicolumn{3}{l}{\mathbf{let}} \\
+    \multicolumn{3}{l}{\qquad \mathit{query} = \ldots} \\
+    \multicolumn{3}{l}{\mathit{runQuery}~\mathit{query}}\\
+    \multicolumn{3}{l}{\mathit{return}~()}
+\end{array} }
+\end{array}
+\end{displaymath}
+
+\textbf{TODO: Some concluding remarks about names; relation to the expression problem}\\
+\textbf{TODO: Say something about monad stacks being ``interpreters'' for inheritance}
+
+\subsection{Monad stack configurations}
+
+Since monadic computations are just values of some data type, they cannot just be evaluated like a regular function. Instead, each monad $X$ has a corresponding $\mathit{runX}$ function which can be used to evaluate a computation. If we have a stack of monads, then successive calls to these functions are required for each layer in the stack, as shown in Section 1. This is often cumbersome as the programmer has to remember to insert the calls to these $\mathit{runX}$ functions, place them in the right order, and supply them with the right arguments.
+
+Let us introduce a notation of \emph{monad stack configurations} or, more simply, ``objects''. An object in our system is a value which, when supplied to an external call, provides all the required information to set up an appropriate monad stack for that computation. In other words, the external call first becomes an interpreter for the object which calls the appropriate $\mathit{runX}$ functions in an order specified by the object, before making the internal call corresponding to itself on top of the newly constructed monad stack. Finally, the external call will return an updated object as well as a result. For this paper, we will only consider objects corresponding to state monads,
+
+Before we look at the behaviour of external calls in detail, let us define the structure of objects. Objects are represented using an algebraic data type. \textbf{TODO: explain what a class is} For a base class -- a class which has no ancestors -- there is only one possible data constructor. For the $\mathit{MyDatabase}$ monad from our running example, we would have:
+\begin{displaymath}
+\begin{array}{lcl}
+\mathbf{data}~\mathit{MyDatabaseObj} & = & \mathit{MkMyDatabaseData}~\{ \\
+\multicolumn{3}{l}{\qquad \mathit{myDatabaseState} :: \mathit{SqlDatabase} }  \\
+\} && 
+\end{array}
+\end{displaymath}
+
+\begin{displaymath}
+\begin{array}{lcl}
+\mathbf{data}~\mathit{DbModelObj} & = & \mathit{MkDbModelData}~\{ \\
+\multicolumn{3}{l}{\qquad \begin{array}{lcl}
+\mathit{dbModelParent} & :: & \mathit{MyDatabaseObj}, \\
+\mathit{dbModelState} & :: & \mathit{Map}~\mathit{Int}~\mathit{Recipe}
+\end{array}  }  \\
+\} && 
+\end{array}
+\end{displaymath}
+
+\subsection{External calls}
+
+\begin{displaymath}
+\begin{array}{l}
+\mathbf{class}~\mathit{SqlDatabaseCtx}~\mathit{obj}~\mathit{st}~m \mid \mathit{obj} \to \mathit{st}, \mathit{st} \to \mathit{obj}~\mathbf{where}\\
+\qquad \begin{array}{lcl}
+\mathit{runQuery\_int} & :: & \mathit{String} \to \mathit{StateT}~\mathit{st}~m~\mathit{SqlReader} \\
+\mathit{runQuery\_ext} & :: & \mathit{obj} \to \mathit{String} \to m~(\mathit{SqlReader}, \mathit{obj})
+\end{array}
+\end{array}
+\end{displaymath}
