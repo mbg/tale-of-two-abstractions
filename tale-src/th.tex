@@ -1,8 +1,6 @@
 \section{Template Haskell}
 \label{sec:th}
 
-\textbf{COPIED FROM OLD VERSION}
-
 We have implemented our system in a Haskell library\footnote{\url{https://github.com/mbg/monadic-state-hierarchies}} which primarily provides a $\mathit{QuasiQuoter}$ \citep{mainland2007s} for our object notation. Multiple state declarations may be included in a single quotation and, indeed, this is necessary if multiple state classes depend on each other. The examples in Section \ref{sec:usage} can be used exactly as shown. For example, for $\mathit{MListItem}$ we write:
 \begin{displaymath}
 \begin{array}{l}

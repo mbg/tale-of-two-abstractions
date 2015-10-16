@@ -1,8 +1,6 @@
 \section{Conclusions and future work}
 \label{sec:conclusions}
 
-\textbf{COPIED FROM OLD VERSION}
-
 We have shown how to encode an object system in pure Haskell, built on top of monad transformers. Additionally, we have described a process for translating to our encoding from an object-oriented language. This process is implemented in a Haskell library enabling programmers to use object classes in their Haskell programs without having to resort to a different language or impurity. Our system allows programmers to write modular programs in a purely functional language in a familiar style. 
 
 The dynamic dispatch mechanism hides calls to the $\mathit{lift}$ function of monad transformers from the programmer, while also allowing more fine-grained control. Each layer of our monad stack is mapped to a corresponding class. Overriding a method in one class can be used to intercept calls from sub-classes. We believe that this is a powerful representation of monad transformers which, if generalised to monads other than the state monad, would allow us to reduce the amount of boilerplate which is currently required.
