@@ -23,7 +23,7 @@ synonym for $\textbf{class C extends Object}$.
 }
 for $\mathit{StateT}~s~\mathit{Identity}$ where $\mathit{Identity}$ is a monad
 whose only effect is (pure) function application:
-\amnote{Michael check!}
+\amnote{Michael check `pure'  also alias vs synonym.}
 \begin{displaymath}
 \begin{array}{lcl}
 \multicolumn{3}{l}{\mathbf{type}~\mathit{DbModel} = \mathit{StateT}~\mathit{Model}~\mathit{MyDatabase}}\\\\
@@ -42,7 +42,9 @@ The $\mathit{saveChanges}$ function is responsible for updating the database acc
 by the $\mathbf{do}$-syntax.
 From now on, we will refer to this as being unable to ``run on top of the monad stack''.
 
-We wish to draw an analogy between these monad stacks and class inheritance. The monad stack in our example corresponds to the following definitions in Java:
+We wish to draw an analogy between these monad stacks and class inheritance.
+% Our example monad stack example corresponds to the following Java definitions:
+Our example monad stack example corresponds to Java definitions:
 \begin{displaymath}
 \begin{array}{lclc}
 \mathbf{class}~\mathit{MyDatabase} & \quad \{ & \mathit{SqlDatabase}~\mathit{db}; & \} \\
