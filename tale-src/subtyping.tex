@@ -32,7 +32,7 @@ The author of the $\mathit{Expr}$ class does not need to know about the $\mathit
 \}
 \end{array}
 \end{displaymath}
-Without subtyping, the $\mathit{Add}$ class would be useless. There would be no possible values for the $\mathit{left}$ and $\mathit{right}$ fields, since $\mathit{Expr}$ itself is abstract and cannot be instantiated. It is only useful if sub-classes of $\mathit{Expr}$, which can be instantiated, can be used as $\mathit{Expr}$ values. In the remainder of this section, we will show how to modify the encodings for our object system to support \emph{coercive subtyping} in Haskell.
+Without subtyping, the $\mathit{Add}$ class would be useless. There would be no possible values for the $\mathit{left}$ and $\mathit{right}$ fields, since $\mathit{Expr}$ itself is abstract and cannot be instantiated. It is only useful if sub-classes of $\mathit{Expr}$, which can be instantiated, can be used as $\mathit{Expr}$ values. In the remainder of this section, we show how to modify the encodings for our object system to support \emph{coercive subtyping} in Haskell.
 
 \subsection{Objects as heterogenous zippers}
 
@@ -172,7 +172,9 @@ Casts in the other direction require a bit more work. Firstly, we need a differe
 \section{Translation}
 \label{sec:auto}
 
-Encoding object classes for our system by hand is both repetitive and error-prone. Luckily, the encoding is also well-suited for auto-generation. In this section, we propose syntactic sugar resembling the usual notation for object classes used by object-oriented languages. The corresponding encodings can automatically be generated from this syntax. Since the $\mathbf{class}$ keyword is already used for type classes in Haskell, object classes use the $\mathbf{state}$ keyword instead. The following is an overview of the structure of a declaration for an object class:
+Encoding object classes for our system by hand is both repetitive and error-prone. Luckily, the encoding is also well-suited for auto-generation using Template Haskell.
+In this section, we propose syntactic sugar resembling the usual notation for object classes used by object-oriented languages. The corresponding encodings can automatically be generated from this syntax. Since the $\mathbf{class}$ keyword is already used for type classes in Haskell, object classes use the $\mathbf{state}$ keyword instead.
+Declarations for object classes have syntax:
 \begin{displaymath}
 \begin{array}{l}
 [\mathbf{abstract} \mid \mathbf{final}]~\mathbf{state}~\mathit{C}~\overline{\mathit{tyvar}}~[: P~\overline{\mathit{type}}]~\mathbf{where} \\
@@ -181,6 +183,8 @@ Encoding object classes for our system by hand is both repetitive and error-pron
 \quad \overline{\mathit{equation}}
 \end{array}
 \end{displaymath}
+(We use the usual overline and square-bracket meta-syntax for repetition
+and optional elements respectively.)
 The $\mathbf{state}$ keyword is optionally preceded by either an $\mathbf{abstract}$ or $\mathbf{final}$ modifier, but cannot have both. If the $\mathbf{abstract}$ modifier is specified, the class cannot be instantiated directly, but it may include method typings marked as $\mathbf{abstract}$ which do not have an accompanying binding. Unless a class which inherits from an abstract class is abstract itself, it must implement all of its ancestors' methods which are marked as $\mathbf{abstract}$ and are therefore lacking an implementation. If a class is marked as $\mathbf{final}$, then no other class can inherit from it. This is accomplished by omitting the data constructors which allow successor $\Delta$-objects as shown in Figure \ref{tab:baseconstructors}.
 
 The name of an object class $C$ follows the conventions for type constructors\footnote{In Haskell, this means that the name must start with an upper-case character.} and is followed by zero or more type variables. The optional $: \mathit{P}~\overline{\mathit{type}}$ component of the header of the declaration is used to specify the class's parent. $P$ must be the name of a non-final object class. There must be as many $\mathit{type}$s as there are type parameters in $P$'s definition. Any type variables used here must first be declared as type parameters of $C$.
