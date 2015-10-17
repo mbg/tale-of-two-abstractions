@@ -1,14 +1,15 @@
 \section{Introduction}
 \label{sec:introduction}
 
-In a purely-functional programming language, such as Haskell, we might wish to write an application which interacts with an in-memory database. Since values are immutable, an update to the database returns a new, updated copy of it. To avoid having to keep track of the most recent version of the database, we use the state monad:
+In a purely functional programming language, such as Haskell, we might wish to write an application which interacts with an in-memory database. Since values are immutable, an update to the database returns a new, updated copy of it. To avoid having to keep track of the most recent version of the database, we use the state monad:
 \begin{displaymath}
 \begin{array}{lcl}
 \multicolumn{3}{l}{\mathbf{type}~\mathit{MyDatabase} = \mathit{State}~\mathit{SqlDatabase}}\\
 \mathit{runQuery} & :: & \mathit{String} \to \mathit{MyDatabase}~\mathit{SqlReader}
 \end{array}
 \end{displaymath}
-The database is represented by the $\mathit{SqlDatabase}$ type and is used as an argument to the $\mathit{State}$ type, which represents the state monad. For convenience, we define $\mathit{MyDatabase}$ an alias for this. The type of $\mathit{runQuery}$ tells us that, if given an SQL query represented as a string of characters, it will run the query using an underlying database and give us back a result, represented by the $\mathit{SqlReader}$ type. The implementation of this function is not important, but note that its codomain is $\mathit{MyDatabase}~\mathit{SqlReader}$, meaning that the result is returned with the effect of mutating a database. 
+The database is represented by the $\mathit{SqlDatabase}$ type and is used as an argument to the $\mathit{State}$ type, which represents the state monad. For convenience, we define $\mathit{MyDatabase}$ an alias for this. The type of $\mathit{runQuery}$ tells us that, if given an SQL query represented as a string of characters, it will run the query using an underlying database and give us back a result, represented by the $\mathit{SqlReader}$ type.
+The implementation of $\mathit{runQuery}$ is not important, but note that its codomain is $\mathit{MyDatabase}~\mathit{SqlReader}$, meaning that the result is returned with the effect of mutating a database. 
 
 Writing an application using just $\mathit{runQuery}$ may be prone to errors, however. For example, if the name of a table or column changes, all queries which refer to it must be updated as well. A common solution for this is to abstract over the entity model of the database, instead of writing SQL queries directly. For this purpose, we define a data type which represents our entity model. In this example, we have a table containing recipes, indexed by a unique, numeric identifier:
 \begin{displaymath}
@@ -16,7 +17,13 @@ Writing an application using just $\mathit{runQuery}$ may be prone to errors, ho
 \multicolumn{3}{l}{\mathbf{data}~\mathit{Model} = \mathit{MkModel}~(\mathit{Map}~\mathit{Int}~\mathit{Recipe})}
 \end{array}
 \end{displaymath}
-The model caches all changes we make to the table and allows us to only update the database when we wish to do so. To implement this, we layer the model on top of the database using the state monad transformer $\mathit{StateT}$, creating a \emph{monad stack} in the process. Note that, for some type $s$, the $\mathit{State}~s$ type we have encountered previously is an alias for $\mathit{StateT}~s~\mathit{Identity}$ where $\mathit{Identity}$ is a monad whose effect is function application:
+The model caches all changes we make to the table and allows us to only update the database when we wish to do so. To implement this, we layer the model on top of the database using the state monad transformer $\mathit{StateT}$, creating a \emph{monad stack} in the process. Note that, for any type $s$, the $\mathit{State}~s$ type we have encountered previously is an alias\footnote{
+In many object-oriented languages $\textbf{class C}$ is an analogous
+synonym for $\textbf{class C extends Object}$.
+}
+for $\mathit{StateT}~s~\mathit{Identity}$ where $\mathit{Identity}$ is a monad
+whose only effect is (pure) function application:
+\amnote{Michael check!}
 \begin{displaymath}
 \begin{array}{lcl}
 \multicolumn{3}{l}{\mathbf{type}~\mathit{DbModel} = \mathit{StateT}~\mathit{Model}~\mathit{MyDatabase}}\\\\
@@ -31,7 +38,9 @@ The model caches all changes we make to the table and allows us to only update t
 \end{array} }
 \end{array}
 \end{displaymath}
-The $\mathit{saveChanges}$ function is responsible for updating the database according to the cached changes. Firstly, it obtains the current state of the model $m$. It then generates a corresponding query, but this process is not important here so that it has been omitted. Lastly, the function calls $\mathit{runQuery}$ with the generated query. Note, however, that we must wrap the call to $\mathit{runQuery}$ in a call to $\mathit{lift}$, because otherwise the type of $\mathit{runQuery}$ does not match the one expected by the implicit $\bind$ in the $\mathbf{do}$-syntax. From now on, we will refer to this as being unable to ``run on top of the monad stack''.
+The $\mathit{saveChanges}$ function is responsible for updating the database according to the cached changes. Firstly, it obtains the current state of the model $m$. It then generates a corresponding query, but this process is not important here so that it has been omitted. Lastly, the function calls $\mathit{runQuery}$ with the generated query. Note, however, that we must wrap the call to $\mathit{runQuery}$ in a call to $\mathit{lift}$, because otherwise the type of $\mathit{runQuery}$ does not match that of the implicit $\bind$ operators introduced
+by the $\mathbf{do}$-syntax.
+From now on, we will refer to this as being unable to ``run on top of the monad stack''.
 
 We wish to draw an analogy between these monad stacks and class inheritance. The monad stack in our example corresponds to the following definitions in Java:
 \begin{displaymath}
@@ -44,9 +53,15 @@ The Haskell type $\mathit{MyDatabase}~r$ models a type of computation which can 
 
 The Java class definitions do exactly the same thing. For some arbitrary type $r$, a method $r~\mathit{foo}()~\{~\ldots~\}$ in class $\mathit{MyDatabase}$ can access $\mathit{MyDatabase}$'s fields which, in this case, is just $\mathit{db}$ of type $\mathit{SqlDatabase}$ and return a value of type $r$.  Similarly a method $r~\mathit{bar}()~\{~\ldots~\}$ in class $\mathit{DbModel}$ can access $\mathit{DbModel}$'s fields, $\mathit{model}$ and $\mathit{db}$, which is inherited from $\mathit{MyDatabase}$. 
 
-In a sense, mutable variables or values of types $\mathit{SqlDatabase}$ and $\mathit{Model}$ are in scope in both Haskell and Java, but while accessing them in Java is very straight-forward thanks to their names, doing so in Haskell is not since they are not given names. Consequently, we have to indicate, using some number of chained calls to $\mathit{lift}$, how deep into the ``inheritance hierarchy'' or monad stack we wish to dive in order to access the state we desire. In other words, we have to write what is essentially equivalent to \emph{e.g.} $\mathit{this}.\mathit{super}.\mathit{runQuery}(\mathit{query})$ in pseudo Java. 
+In a sense, mutable variables of types $\mathit{SqlDatabase}$ and $\mathit{Model}$ are in scope in both Haskell and Java, but while accessing them in Java is very straightforward thanks to their names, doing so in Haskell is not since they are not given names. Consequently, we have to indicate, using some number of chained calls to $\mathit{lift}$, how deep into the ``inheritance hierarchy'' or monad stack we wish to dive in order to access the state we desire. In other words, we have to write what is essentially equivalent to \emph{e.g.} $\mathit{this}.\mathit{super}.\mathit{runQuery}(\mathit{query})$ in pseudo-Java. 
 
-Let us note here that putting two state monads on top of each other is isomorphic to having a single state monad with a pair combining the states. However, we believe that the latter approach makes code less reusable since, for example, the $\mathit{runQuery}$ function would be entirely incompatible with a state monad where the state is pair of the old and some new state -- it would have to be rewritten. However, by putting another state monad on top, the old definition can be reused. Moreover, since this isomorphism is only applicable to the state monad, the ideas presented here can be applied to monad stacks consisting of arbitrary monads, not just state, if we stick to the presentation above. 
+The Haskell reader might wonder why have made a stack of two state monads
+when this is isomorphic to a single state monad on the product of the
+individual states.
+However, the latter approach makes code less reusable since, for example, the $\mathit{runQuery}$ function would be incompatible with a state monad where the state is pair of the old and some new state~-- it would have to be rewritten. However, by putting another state monad on top, the old definition can be reused
+(a central justification of inheritance as a structuring mechanism).
+Furthermore, this isomorphism is only applicable to the state monad, and
+the inheritance-structuring ideas presented here can be applied to monad stacks consisting of arbitrary monads (and not just state).
 
 To use the implementation of the entity model in our example, we must also write the following:
 \begin{displaymath}
@@ -62,19 +77,30 @@ To use the implementation of the entity model in our example, we must also write
 \end{array}
 \end{array}
 \end{displaymath}
-It may be surprising that $\mathit{go}$ cannot be called directly, since the $\mathbf{do}$-syntax makes us think of it is a function. However, most monadic computations are represented as values of some data type, which contain the actual behaviour of the function we define embedded into them. Consequently, these values cannot just be executed. Instead, the $\mathit{runX}$ function for some monad $X$ can be seen as an interpreter which begins evaluating the computation, while exhibiting its effect.
+It may be surprising that $\mathit{go}$ cannot be called directly, since the $\mathbf{do}$-syntax makes us think of it is a function.
+% However, most monadic computations are represented as values of some data type,
+However, monadic computations are conceptually values of some data type,
+which contain the actual behaviour of the function we define embedded into them.
+Consequently, these values cannot just be executed. Instead, the $\mathit{runX}$ function for some monad $X$ can be seen as an interpreter which begins evaluating the computation, while exhibiting its effect.
 
-One way of interpreting the $\mathit{runState}$ and $\mathit{runStateT}$ functions is as the equivalent of opening a new scope in a language like C, which causes additional variables to be stored on the stack. The calls to $\mathit{lift}$ then correspond to following indirections to stack frames containing the variables we wish to access. Another way of viewing the behaviour of $\mathit{runState}$/$\mathit{runStateT}$ is as invoking a method on an object, supplying it with the implicit value of $\mathit{this}$. This ties in with our earlier discussion of the behaviour of $\mathit{lift}$.
+One way of seeing the $\mathit{runState}$ and $\mathit{runStateT}$ functions is as the equivalent of opening a new scope in a language like C, which allocates
+additional variables on the stack.
+The calls to $\mathit{lift}$ then correspond to following indirections to stack frames containing the variables we wish to access. Another way of viewing the behaviour of $\mathit{runState}$/$\mathit{runStateT}$ is as invoking a method on an object, supplying it with the implicit value of $\mathit{this}$. This ties in with our earlier discussion of the behaviour of $\mathit{lift}$.
 
 Neither of these two interpretations requires the programmer to explicitly implement the respective behaviour in other languages, yet it has to be made explicit for monad transformers in Haskell. We believe that this is at least partially due to the lack of names in monad stacks, while local variables in C and class members in object-oriented languages both have names. In Haskell's \texttt{mtl}\footnote{\url{http://hackage.haskell.org/package/mtl}} library, type classes are used to allow for the automatic lifting of functions such as $\mathit{get}$ and $\mathit{put}$ through a monad stack, if there is only one state monad in it. In other words, it addresses the naming problem for distinct effects, but not for several instances of the same effect.
 
-Interestingly, if we add names to the computations which can be run on a monad stack, then it exposes a choice in programming styles commonly known as the expression problem\cite{wadler1998expression}. Without names, we can add both layers and computations to a monad stack at will, but have to manually call the $\mathit{lift}$ function. With names, we can automatically generate calls to $\mathit{lift}$, but computations can no longer be added at will.
+Interestingly, if we add names to the computations which can be run on a monad stack, then it exposes a choice in programming styles commonly known as the expression problem~\cite{wadler1998expression}. Without names, we can add both layers and computations to a monad stack at will, but have to manually call the $\mathit{lift}$ function. With names, we can automatically generate calls to $\mathit{lift}$, but computations can no longer be added at will.
 
-In this work, we treat stacks of state monad transformers as objects and allow programmers to define classes of state monad transformer stacks. There is no the need for explicit $\mathit{lift}$ and $\mathit{runState}$/$\mathit{runStateT}$ calls, but programmers must also define all of their computations which make use of mutable state as part of these classes. Specifically, our contributions are:
+In this work, we treat stacks of state monad transformers as objects and allow programmers to define classes of state monad transformer stacks.
+There is no need for explicit $\mathit{lift}$ and $\mathit{runState}$/$\mathit{runStateT}$ calls, but programmers
+are must follow the object-oriented structuring principle that
+computations which make use of mutable state must be defined
+as part of these classes.
+Specifically, our contributions are:
 \begin{itemize}
     \item We have established a relationship between inheritance and (state) monad transformers, allowing us to exploit well-known techniques in object-oriented programming for monadic programming. This relationship also exposes similarities to the expression problem, suggesting that we may have to choose between one advantage or the other.
     \item State monad transformers have had this behaviour all along, but thus far it has been awkward for programmers to make use of it. We show how to encode a simple object system in Haskell which exploits the correspondence to inheritance in order to simplify the usage of state monads (Section 2).
-    \item By describing an encoding of subtyping in which objects are represented as functional zippers, we enable a third type of polymorphism within Haskell. If we have an object class $B$ which is a subtype of an object class $A$, then there is a representation of a $B$ object which has type $A$. As a result, subtype polymorphism also enables programmers to construct modular data types. Like Java and other object-oriented languages, our approach does not require whole-program compilation but unlike, for example, open data types and functions\cite{loh2006open} (Section 3).
+    \item By describing an encoding of subtyping in which objects are represented as functional zippers, we enable a third type of polymorphism within Haskell. If we have an object class $B$ which is a subtype of an object class $A$, then there is a representation of a $B$ object which has type $A$. As a result, subtype polymorphism also enables programmers to construct modular data types. Like Java and other object-oriented languages, our approach does not require whole-program compilation but unlike, for example, open data types and functions~\cite{loh2006open} (Section 3).
     \item We use Template Haskell to provide a convenient method for programmers to generate such encodings from class definitions without any new extensions to the host language. We require no transformation of any function or method definitions as our library implements the combinators in standard Haskell (Section 4).
 \end{itemize}
 
