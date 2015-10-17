@@ -236,7 +236,7 @@ For each field, there is a getter and a setter. Just like methods, each has an i
 
 An instance of this type class is generated as well as one for each type class belonging to an ancestor of $C$. Each external method's implementation pattern matches on the configuration of the object, adds a state monad transformer layer on top of the existing monad stack, and then either invokes its own, internal implementation of the method or propagates the call to a sub-class.
 
-If $C$ is not a base class, a second instance of $\mathit{CLike}$ is generated with the underlying monad set to $\mathit{Identity}$. In this case, all methods use $\_P\_\mathit{invoke}$ on the $\Delta$-object belonging to $P$ to perform the process shown in Figure \ref{fig:subinvoke}:
+If $C$ is not a base class, a second instance of $\mathit{CLike}$ is generated with the underlying monad set to $\mathit{Identity}$. In this case, all methods use $\_P\_\mathit{invoke}$ on the $\Delta$-object belonging to $P$ to perform the process shown in Figure \ref{fig:invoke}:
 \begin{displaymath}
 \begin{array}{l}
 \mathbf{instance}~\mathit{CLike}~\mathit{C}~\mathit{CState}~\mathit{Identity}~\overline{\mathit{tyvar}}~\mathbf{where}\\

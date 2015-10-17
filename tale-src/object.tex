@@ -12,7 +12,6 @@ We address internal calls first, before moving on to external calls later in thi
 
 Most monadic computations in Haskell are represented by values of some data type, which can be combined with $\bind$ and ultimately evaluated by some corresponding $\mathit{runX}$ function. Monad transformers are therefore the data types belonging to monads, which are parametrised over and defined in terms of the data type belonging to some arbitrary monad. A monadic computation, such as $\mathit{runQuery}$ returns a value of the data type corresponding to the monad stack it runs on. Since $\mathit{runQuery}$ and $\mathit{saveChanges}$ run on top of different monad stacks, they return values of different, incompatible types. In order to use $\mathit{runQuery}$ on top of the same monad stack as $\mathit{saveChanges}$, it must return a value of the same type, because otherwise it cannot be composed using $\bind$ with other computations in the sequence. 
 
-\amnote{Michael to check this rewording. Woulds/shoulds removed in favour of ``this is what we do''}%
 The solution is to make
 $\mathit{runQuery}$ an overloaded function which returns a value of the monadic data type corresponding to the other computations in the same \textbf{do} sequence.
 Overloading in Haskell is achieved through type classes, so instead of defining $\mathit{runQuery}$ as a global function with a specific type, we instead define it as part of a type class:
@@ -65,8 +64,7 @@ Since monadic computations are just values of some data type, they cannot just b
 We refer to these as \emph{external calls}; internal calls, discussed above,
 are those which does not require a ``configuration'' to be supplied~-- \emph{i.e.} corresponding to a call $\mathit{this}.f()$ in Java. 
 
-Before we show how to implement external calls, we first introduce a notation of \emph{monad stack configurations} or, more simply, ``objects''.
-\amnote{'notation'?}%
+Before we show how to implement external calls, we first introduce the concept of \emph{monad stack configurations} or, more simply, ``objects''.
 An object in our system is a value which describes the layers of a monad stack. Each layer is described by what we call a $\Delta$-object. When an object is supplied as part of an external call, it provides all the required information for the callee to call the appropriate $\mathit{runX}$ functions and in the appropriate order, so that the monadic computation corresponding to the call can be evaluated. In other words, the function invoked for an external call is a wrapper around the monadic computation which traverses the $\Delta$-objects within an object. Once the monadic computation has been evaluated, the wrapper returns an updated object as well as a result to the caller. For this paper, we only consider $\Delta$-objects corresponding to state monads, although in principle nothing prohibits us from constructing $\Delta$-objects which correspond to other monads.
 
 Objects and $\Delta$-objects are represented using algebraic data types. In the case of the bottom layer of a monad stack, there is only a single $\Delta$-object which makes up the object. We assume that there exists some specification for the structure of the monad stack which we shall refer to as \emph{object classes}. An object class can either be a \emph{base class}, representing the bottom of a monad stack, or a \emph{sub-class}, representing an extension to some other monad stack. For state monads and this paper, we may think of them as the same as Java classes. Each class contains a set of fields, representing the state of the corresponding state monad, as well as a set of methods, representing the monadic computations which are part of a corresponding type class and can automatically be $\mathit{lift}$ed. 
@@ -99,9 +97,7 @@ The reasoning for this is twofold: firstly, it saves us from having to copy and 
 \begin{displaymath}
 \mathit{config} = \mathit{MkDbModelData}~\mathit{emptyModel}~(\mathit{MkMyDatabaseData}~\mathit{initialDatabase})
 \end{displaymath}
-Importantly, instead of having two separate values for the monad stack's state, we have combined them into one configuration, although they are still separate within this configuration. The wrapper for an external call can traverse such a configuration to set up
-\amnote{set up a monad stack!}%
-the monad stack layer-by-layer as we detail in the next section.
+Importantly, instead of having two separate values for the monad stack's state, we have combined them into one configuration, although they are still separate within this configuration. The wrappers for an external call can traverse such a configuration to call the $\mathit{runX}$ functions layer-by-layer as we detail in the next section.
 
 \subsection{External calls}
 
