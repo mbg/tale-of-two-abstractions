@@ -183,8 +183,8 @@ Declarations for object classes have syntax:
 \quad \overline{\mathit{equation}}
 \end{array}
 \end{displaymath}
-(We use the usual overline and square-bracket meta-syntax for repetition
-and optional elements respectively.)
+We use the usual overline and square-bracket meta-syntax for repetition
+and optional elements respectively.
 The $\mathbf{state}$ keyword is optionally preceded by either an $\mathbf{abstract}$ or $\mathbf{final}$ modifier, but cannot have both. If the $\mathbf{abstract}$ modifier is specified, the class cannot be instantiated directly, but it may include method typings marked as $\mathbf{abstract}$ which do not have an accompanying binding. Unless a class which inherits from an abstract class is abstract itself, it must implement all of its ancestors' methods which are marked as $\mathbf{abstract}$ and are therefore lacking an implementation. If a class is marked as $\mathbf{final}$, then no other class can inherit from it. This is accomplished by omitting the data constructors which allow successor $\Delta$-objects as shown in Figure \ref{tab:baseconstructors}.
 
 The name of an object class $C$ follows the conventions for type constructors\footnote{In Haskell, this means that the name must start with an upper-case character.} and is followed by zero or more type variables. The optional $: \mathit{P}~\overline{\mathit{type}}$ component of the header of the declaration is used to specify the class's parent. $P$ must be the name of a non-final object class. There must be as many $\mathit{type}$s as there are type parameters in $P$'s definition. Any type variables used here must first be declared as type parameters of $C$.
