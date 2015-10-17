@@ -182,17 +182,8 @@ The $\mathit{DbModel}$ layer in our example has its own type class, for which $\
 As mentioned previously, there are two instances for every type class an object implements. The \emph{primary instance} for $\mathit{DbModelObj}$ where $m = \mathit{MyDatabase}$ is shown below. It follows exactly the same structure as the instance of $\mathit{SqlDatabaseCtx}$ for $\mathit{MyDatabaseObj}$:
 \begin{displaymath}
 \begin{array}{l}
-\mathbf{instance}~\mathit{DbModelCtx}~\mathit{DbModelObj}~(\mathit{Map}~\mathit{Int}~\mathit{Recipe})~\mathit{MyDatabase}~\mathbf{where}\\\\
+\mathbf{instance}~\mathit{DbModelCtx}~\mathit{DbModelObj}~(\mathit{Map}~\mathit{Int}~\mathit{Recipe})~\mathit{MyDatabase}~\mathbf{where}\\
 \qquad \begin{array}{lcl}
-\mathit{\_\mathit{dbModelCtx\_invoke}} ~\mathit{obj}~f~(\mathit{MkMyDatabaseData}~d) & = & \mathbf{do}\\
-\multicolumn{3}{l}{\qquad \begin{array}{lcl}
-((r, \mathit{obj'}, d')) & \leftarrow & \mathit{runStateT}~(f~\mathit{obj})~d \\
-\multicolumn{3}{l}{\mathit{return}~(r, \mathit{MkMyDatabaseData}~d'), \mathit{obj}'}
-\end{array}}
-\\\\
-\multicolumn{3}{l}{\qquad \mathit{DbModelCtx}~\mathit{obj}'~\mathit{st}'~(\mathit{StateT}~\mathit{st}~\mathit{m}) \Rightarrow}\\
-\multicolumn{3}{l}{\qquad \mathit{obj}' \to (\mathit{obj}' \to \mathit{StateT}~\mathit{st}~m~(r,\mathit{obj}')) \to} \\
-\multicolumn{3}{l}{\qquad \mathit{obj} \to m~(r,\mathit{obj},\mathit{obj}')} \\\\
 \mathit{\_int\_saveChanges} & = & \mathbf{do} \\
 \multicolumn{3}{l}{\qquad \begin{array}{lcl}
     m & \leftarrow & \mathit{get} \\
@@ -207,19 +198,18 @@ As mentioned previously, there are two instances for every type class an object 
 \end{array}
 \end{array}
 \end{displaymath}
-The second instance of $\mathit{DbModelCtx}$ for $\mathit{DbModelObj}$, where $m = \mathit{Identity}$ is more interesting, since it implements the behaviour shown in Figure \ref{fig:invoke}.
+Note that there is no implementation for $\_\mathit{dbModelCtx}\_\mathit{invoke}$ since the $\_\mathit{invoke}$ functions are only used by the $m = \mathit{Identity}$ instances. The second instance of $\mathit{DbModelCtx}$ for $\mathit{DbModelObj}$, where $m = \mathit{Identity}$ is indeed more interesting, since it implements the behaviour shown in Figure \ref{fig:invoke}.
 % may need a lambda in the recursive invoke call
-
 \begin{displaymath}
 \begin{array}{l}
 \mathbf{instance}~\mathit{DbModelCtx}~\mathit{DbModelObj}~(\mathit{Map}~\mathit{Int}~\mathit{Recipe})~\mathit{Identity}~\mathbf{where}\\
 \qquad \begin{array}{lcl}
-\mathit{\_\mathit{dbModelCtx\_invoke}}~\mathit{obj}~\mathit{f}~(\mathit{MkDbModelData}~p~d) & = & \mathbf{do} \\
-\multicolumn{3}{l}{\qquad \mathit{(r,p',\mathit{MkDbModelData}~\_~d) \leftarrow}}\\
-\multicolumn{3}{l}{\qquad \qquad \mathit{\_myDatabaseCtx\_invoke}~\mathit{obj}~\mathit{f}~p} \\
-\multicolumn{3}{l}{\qquad \mathit{return}~(r,\mathit{MkDbModelData}~p'~d)} \\\\
-\multicolumn{3}{l}{\qquad \mathit{obj}' \to (\mathit{obj}' \to \mathit{StateT}~\mathit{st}~m~(r,\mathit{obj}')) \to} \\
-\multicolumn{3}{l}{\qquad \mathit{obj} \to m~(r,\mathit{obj},\mathit{obj}')} \\\\
+%\mathit{\_\mathit{dbModelCtx\_invoke}}~\mathit{obj}~\mathit{f}~\mathit{self}@(\mathit{MkDbModelData}~p~d) & = & \mathbf{do} \\
+%\multicolumn{3}{l}{\qquad \mathit{(r,p',\mathit{MkDbModelData}~\_~d) \leftarrow}}\\
+%\multicolumn{3}{l}{\qquad \qquad \mathit{\_myDatabaseCtx\_invoke}~\mathit{self}~(\lambda \mathit{obj}' \to \mathit{f})~p} \\
+%\multicolumn{3}{l}{\qquad \mathit{return}~(r,\mathit{MkDbModelData}~p'~d)} \\\\
+%\multicolumn{3}{l}{\qquad \mathit{obj}' \to (\mathit{obj}' \to \mathit{StateT}~\mathit{st}~m~(r,\mathit{obj}')) \to} \\
+%\multicolumn{3}{l}{\qquad \mathit{obj} \to m~(r,\mathit{obj},\mathit{obj}')} \\\\
 
 \mathit{\_ext\_saveChanges}~\mathit{obj}@(\mathit{MkDbModelData}~p~\_) & = & \mathbf{do} \\
 \multicolumn{3}{l}{\qquad (r,p',\mathit{MkDbModelData}~\_~d) \leftarrow} \\
@@ -228,3 +218,6 @@ The second instance of $\mathit{DbModelCtx}$ for $\mathit{DbModelObj}$, where $m
 \end{array}
 \end{array}
 \end{displaymath}
+The definition of $\_\mathit{ext}\_\mathit{saveChanges}$ forwards the call to the $m = \mathit{Identity}$ instance of its parental class, which in this case is the primary instance of $\mathit{DbModelCtx}$ for $\mathit{MyDatabaseObj}$. Note that there is no implementation for $\_\mathit{int}\_\mathit{saveChanges}$ for this instance since it cannot be called using the interface we provide in Section \ref{sec:th}. The definition of $\_\mathit{dbModelCtx}\_\mathit{invoke}$ has been omitted for brevity since it largely mirrors that of the instance for $\mathit{MyDatabaseObj}$.
+
+This mechanism for invoking the $\mathit{runX}$ functions in the order given by a class hierarchy also extends to our system with the addition of subtyping, which we describe in the next section.
