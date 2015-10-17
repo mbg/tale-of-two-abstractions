@@ -3,13 +3,19 @@
 
 Consider the database example from Section 1. As the programmer, we know when writing the $\mathit{saveChanges}$ function that $\mathit{runQuery}$ can be run on a smaller part of our monad stack. \emph{I.e.} it requires the monad stack to be $\mathit{State}~\mathit{SqlDatabase}$, while the monad stack of $\mathit{saveChanges}$ also provides additional state on top of that. As a result of this type incompatibility, we must use $\mathit{lift}$ to wrap, in this case, the $\mathit{runQuery}$ function up in the type that corresponds to the one expected by $\mathit{saveChanges}$. If this layer is several levels away from the top of the stack, several, successive calls to $\mathit{lift}$ are required.
 
-Let us refer to function calls which can be run on top of the monad stack -- \emph{i.e.} those functions which can directly be composed using $\bind$, with or without the help of $\mathit{lift}$ -- as \emph{internal calls} as opposed to \emph{external calls} which must be wrapped into calls to $\mathit{runX}$ functions, such as \emph{e.g.} $\mathit{runStateT}$, first. We will address internal calls first, before moving on to external calls later in this section. 
+Let us refer to function calls which can be run on top of the monad stack~-- \emph{i.e.} those functions which can directly be composed using $\bind$, with or without the help of $\mathit{lift}$~-- as \emph{internal calls} as opposed to \emph{external calls} which must be wrapped into calls to $\mathit{runX}$ functions, such as \emph{e.g.} $\mathit{runStateT}$, first.
+(Internal and external calls are like Java $\mathit{this}.f()$ and $x.f()$
+respectively.)
+We address internal calls first, before moving on to external calls later in this section.
 
 \subsection{Internal calls}
 
 Most monadic computations in Haskell are represented by values of some data type, which can be combined with $\bind$ and ultimately evaluated by some corresponding $\mathit{runX}$ function. Monad transformers are therefore the data types belonging to monads, which are parametrised over and defined in terms of the data type belonging to some arbitrary monad. A monadic computation, such as $\mathit{runQuery}$ returns a value of the data type corresponding to the monad stack it runs on. Since $\mathit{runQuery}$ and $\mathit{saveChanges}$ run on top of different monad stacks, they return values of different, incompatible types. In order to use $\mathit{runQuery}$ on top of the same monad stack as $\mathit{saveChanges}$, it must return a value of the same type, because otherwise it cannot be composed using $\bind$ with other computations in the sequence. 
 
-In other words, we really want $\mathit{runQuery}$ to be an overloaded function which returns a value of the monadic data type corresponding to the other computations in the same sequence. Overloading in Haskell is achieved through type classes, so instead of defining $\mathit{runQuery}$ as a global function with a specific type, we should instead define it as part of a type class:
+\amnote{Michael to check this rewording. Woulds/shoulds removed in favour of ``this is what we do''}%
+The solution is to make
+$\mathit{runQuery}$ an overloaded function which returns a value of the monadic data type corresponding to the other computations in the same \textbf{do} sequence.
+Overloading in Haskell is achieved through type classes, so instead of defining $\mathit{runQuery}$ as a global function with a specific type, we instead define it as part of a type class:
 \begin{displaymath}
 \begin{array}{l}
 \mathbf{class}~\mathit{SqlDatabaseCtx}~m~\mathbf{where}\\
@@ -36,7 +42,7 @@ We once again omit the exact definition of $\mathit{runQuery}$, but it remains u
 \end{array}
 \end{array}
 \end{displaymath}
-This bears similarity to, for example, the type-theoretic account of object-oriented programming given by Pierce and Turner\cite{pierce1994simple}, where methods inherited from parental classes must also be adapted in a similar style. We can now rewrite the definition of $\mathit{saveChanges}$ to get rid of the explicit call to $\mathit{lift}$:
+This bears similarity to, for example, the type-theoretic account of object-oriented programming given by Pierce and Turner~\cite{pierce1994simple}, where methods inherited from parental classes must also be adapted in a similar style. We can now rewrite the definition of $\mathit{saveChanges}$ to get rid of the explicit call to $\mathit{lift}$:
 \begin{displaymath}
 \begin{array}{lcl}
 \mathit{saveChanges} & :: & \mathit{DbModel}~() \\
@@ -55,9 +61,13 @@ Instead of having to write $\mathit{lift}~(\mathit{runQuery}~\mathit{query})$ ev
 \subsection{Monad stack configurations}
 \label{sec:configurations}
 
-Since monadic computations are just values of some data type, they cannot just be invoked like normal functions. Instead, each monad $X$ has a corresponding $\mathit{runX}$ function which can be used to evaluate a computation in the presence of its effect. If we have a stack of monads, then successive calls to these functions are required for each layer in the stack, as shown in Section 1. This is often cumbersome as the programmer has to remember to insert the calls to these $\mathit{runX}$ functions, place them in the right order, and supply them with the right arguments. Instead, we would much rather like to just supply the monadic computation with its initial configuration, such as the initial state of the state monad, in the same style that a method is invoked on an object. For example, instead of writing $\mathit{runState}~\mathit{foo}~\mathit{state}$, we want to write the equivalent of $\mathit{state}.\mathit{foo}$ and similarly for more complicated stacks of monads. This is what we refer to as \emph{external calls}, while an internal call is one that does not require a ``configuration'' to be supplied -- \emph{i.e.} the equivalent of a call that can optionally be prefixed by $\mathbf{this}$ in Java. 
+Since monadic computations are just values of some data type, they cannot just be invoked like normal functions. Instead, each monad $X$ has a corresponding $\mathit{runX}$ function which can be used to evaluate a computation in the presence of its effect. If we have a stack of monads, then successive calls to these functions are required for each layer in the stack, as shown in Section 1. This is often cumbersome as the programmer has to remember to insert the calls to these $\mathit{runX}$ functions, place them in the right order, and supply them with the right arguments. Instead, we would much rather like to just supply the monadic computation with its initial configuration, such as the initial state of the state monad, in the same style that a method is invoked on an object. For example, instead of writing $\mathit{runState}~\mathit{foo}~\mathit{state}$, we want to write the equivalent of $\mathit{state}.\mathit{foo}$ and similarly for more complicated stacks of monads.
+We refer to these as \emph{external calls}; internal calls, discussed above,
+are those which does not require a ``configuration'' to be supplied~-- \emph{i.e.} corresponding to a call $\mathit{this}.f()$ in Java. 
 
-Before we can show how to implement external calls, let us first introduce a notation of \emph{monad stack configurations} or, more simply, ``objects''. An object in our system is a value which describes the layers of a monad stack. Each layer is described by what we will call a $\Delta$-object. When an object is supplied as part of an external call, it provides all the required information for the callee to call the appropriate $\mathit{runX}$ functions and in the appropriate order, so that the monadic computation corresponding to the call can be evaluated. In other words, the function invoked for an external call is a wrapper around the monadic computation which traverses the $\Delta$-objects within an object. Once the monadic computation has been evaluated, the wrapper will return an updated object as well as a result to the caller. For this paper, we will only consider $\Delta$-objects corresponding to state monads, although in principle nothing prohibits us from constructing $\Delta$-objects which correspond to other monads.
+Before we show how to implement external calls, we first introduce a notation of \emph{monad stack configurations} or, more simply, ``objects''.
+\amnote{'notation'?}%
+An object in our system is a value which describes the layers of a monad stack. Each layer is described by what we call a $\Delta$-object. When an object is supplied as part of an external call, it provides all the required information for the callee to call the appropriate $\mathit{runX}$ functions and in the appropriate order, so that the monadic computation corresponding to the call can be evaluated. In other words, the function invoked for an external call is a wrapper around the monadic computation which traverses the $\Delta$-objects within an object. Once the monadic computation has been evaluated, the wrapper returns an updated object as well as a result to the caller. For this paper, we only consider $\Delta$-objects corresponding to state monads, although in principle nothing prohibits us from constructing $\Delta$-objects which correspond to other monads.
 
 Objects and $\Delta$-objects are represented using algebraic data types. In the case of the bottom layer of a monad stack, there is only a single $\Delta$-object which makes up the object. We assume that there exists some specification for the structure of the monad stack which we shall refer to as \emph{object classes}. An object class can either be a \emph{base class}, representing the bottom of a monad stack, or a \emph{sub-class}, representing an extension to some other monad stack. For state monads and this paper, we may think of them as the same as Java classes. Each class contains a set of fields, representing the state of the corresponding state monad, as well as a set of methods, representing the monadic computations which are part of a corresponding type class and can automatically be $\mathit{lift}$ed. 
 
@@ -69,7 +79,7 @@ The type of $\Delta$-objects for an object class describing the $\mathit{MyDatab
 \} && 
 \end{array}
 \end{displaymath}
-Perhaps surprisingly, the object only stores the initial state of the monad stack represented by $\mathit{MyDatabase}$, namely $\mathit{State}~\mathit{SqlDatabase}$, but no indication that this $\Delta$-object represents a state monad layer in the stack. This is left to the wrapper function we will implement for the external call and is discussed in the following section. Since there is a 1:1 relationship between a $\Delta$-object and the corresponding type class, we can hard-code a $\mathit{runStateT}$ call for its instances.
+Perhaps surprisingly, the object only stores the initial state of the monad stack represented by $\mathit{MyDatabase}$, namely $\mathit{State}~\mathit{SqlDatabase}$, but no indication that this $\Delta$-object represents a state monad layer in the stack. This is left to the wrapper function we will implement for the external call and is discussed in the following section. Since there is a one-one relationship between a $\Delta$-object and the corresponding type class, we can hard-code a $\mathit{runStateT}$ call for its instances.
 
 For $\mathit{DbModel}$, the type of corresponding $\Delta$-objects looks as shown below:
 \begin{displaymath}
@@ -82,11 +92,16 @@ For $\mathit{DbModel}$, the type of corresponding $\Delta$-objects looks as show
 \} && 
 \end{array}
 \end{displaymath}
-In addition to the state monad's initial state, we also store a $\Delta$-object belonging to the parental layer in the monad stack. Unlike in most object-oriented languages, where the inherited state is merged into a sub-class's state, we keep them separate. The reasoning for this is twofold: firstly, it saves us from having to copy and paste code, but secondly, and more importantly, the states need to be separate when the calls to $\mathit{runStateT}$ are made. The configuration required to call $\mathit{saveChanges}$ from our example can now be constructed as follows:
+In addition to the state monad's initial state, we also store a $\Delta$-object belonging to the parental layer in the monad stack.
+In most implementations of object-oriented languages,
+the inherited state is merged into a sub-class's state, but we keep them separate~-- effectively chaining them together.
+The reasoning for this is twofold: firstly, it saves us from having to copy and paste code, but secondly, and more importantly, the states need to be separate when the calls to $\mathit{runStateT}$ are made. The configuration required to call $\mathit{saveChanges}$ from our example can now be constructed as follows:
 \begin{displaymath}
 \mathit{config} = \mathit{MkDbModelData}~\mathit{emptyModel}~(\mathit{MkMyDatabaseData}~\mathit{initialDatabase})
 \end{displaymath}
-Importantly, instead of having two separate values for the monad stack's state, we have combined them into one configuration, although they are still separate within this configuration. The wrapper for an external call can traverse such a configuration to set up the monad stack layer-by-layer as we detail in the next section.
+Importantly, instead of having two separate values for the monad stack's state, we have combined them into one configuration, although they are still separate within this configuration. The wrapper for an external call can traverse such a configuration to set up
+\amnote{set up a monad stack!}%
+the monad stack layer-by-layer as we detail in the next section.
 
 \subsection{External calls}
 
@@ -106,11 +121,11 @@ To begin, we need to change how the type classes which represent the interfaces 
 \end{array}
 \end{array}
 \end{displaymath}
-While we previously had a single-parameter type class whose parameter represented the type corresponding to a monad stack, we now have a multi-parameter type class with three parameters: $\mathit{obj}$ represents the type of an object which describes a monad stack capable of supporting the computations in the interface, $\mathit{st}$ which represents the state added by the object class of $\mathit{obj}$, and $m$ which represents the type of the parental context in which we wish to call the methods -- more on this later. 
+While we previously had a single-parameter type class whose parameter represented the type corresponding to a monad stack, we now have a multi-parameter type class with three parameters: $\mathit{obj}$ represents the type of an object which describes a monad stack capable of supporting the computations in the interface, $\mathit{st}$ which represents the state added by the object class of $\mathit{obj}$, and $m$ which represents the type of the parental context in which we wish to call the methods~-- more on this later. 
 
-We use functional dependencies\cite{jones2000type} to indicate that the object and state type uniquely determine each other. Therefore, only one needs to be known during type inference, in order to select an instance of the type class, even if it is not clear from a context what the type of the other parameter is.
+We use Haskell functional dependencies~\cite{jones2000type} to indicate that the object and state type uniquely determine each other. Therefore, only one needs to be known during type inference, in order to select an instance of the type class, even if it is not clear from a context what the type of the other parameter is.
 
-The type class contains three methods: $\mathit{\_sqlDatabaseCtx\_invoke}$ which we will discuss later, and the internal and external versions of $\mathit{runQuery}$. Note that the type of the internal version of $\mathit{runQuery}$, with prefix $\_\mathit{int}\_$\footnote{As a convention, we will always use names starting with $\_$ to indicate definitions which are only meant to be used internally by our encoding.}, has changed as a result. Instead of $m~\mathit{SqlReader}$ where $m$ is the type corresponding to the full monad stack, we now assemble the type of the top layer in the method's type. This is necessary, because we must refer to the same $m$ in the type of $\mathit{runQuery\_ext}$. The type class instance(s) belonging to a $\Delta$-object can only call the $\mathit{runX}$ function for the layer in the monad stack which they represent and must therefore already be invoked from a context where the $\mathit{runX}$ functions for the monad stack up to that point have been invoked. To illustrate this procedure, the updated instance belonging to the $\mathit{MyDatabase}$ layer in our example is now:
+The type class contains three methods: $\mathit{\_sqlDatabaseCtx\_invoke}$ which we discuss later, and the internal and external versions of $\mathit{runQuery}$. Note that the type of the internal version of $\mathit{runQuery}$, with prefix $\_\mathit{int}\_$\footnote{As a convention, we always use names starting with $\_$ to indicate definitions which are only meant to be used internally by our encoding.}, has changed as a result. Instead of $m~\mathit{SqlReader}$ where $m$ is the type corresponding to the full monad stack, we now assemble the type of the top layer in the method's type. This is necessary, because we must refer to the same $m$ in the type of $\mathit{runQuery\_ext}$. The type class instance(s) belonging to a $\Delta$-object can only call the $\mathit{runX}$ function for the layer in the monad stack which they represent and must therefore already be invoked from a context where the $\mathit{runX}$ functions for the monad stack up to that point have been invoked. To illustrate this procedure, the updated instance belonging to the $\mathit{MyDatabase}$ layer in our example is now:
 \begin{displaymath}
 \begin{array}{l}
 \mathbf{instance}~\mathit{SqlDatabaseCtx}~\mathit{MyDatabaseObj}~\mathit{SqlDatabase}~\mathit{Identity}~\mathbf{where}\\
