@@ -48,14 +48,14 @@ The $\mathit{sub}$ type variable, despite the $\forall$, is existentially-quanti
 Each object class still has its own data type used to represent objects. These are now tailored to account only for the zipper states that objects of a class can actually be in. For example, the encoding of $\mathit{MyDatabase}$ objects is shown below: 
 \begin{displaymath}
 \begin{array}{lcl}
-\mathbf{data}~\mathit{MyDatabase} & = & \mathit{MyDatabaseData}~\{ \\ 
-\multicolumn{3}{l}{\quad \_\mathit{MyDatabase}\_\mathit{data} :: \mathit{MyDatabaseState}}\\
+\mathbf{data}~\mathit{MyDatabaseObj} & = & \mathit{MyDatabaseData}~\{ \\ 
+\multicolumn{3}{l}{\quad \_\mathit{MyDatabase}\_\mathit{data} :: \mathit{SqlDatabase}}\\
 \multicolumn{3}{l}{\begin{array}{lcl}
-    \} & \mid & \forall s~d.\mathit{MyDatabaseLike}~s~d~\mathit{MyDatabaseM} \Rightarrow \\
+    \} & \mid & \forall s~d.\mathit{MyDatabaseLike}~s~d~\mathit{MyDatabase} \Rightarrow \\
     & &  \mathit{MyDatabaseStart}~\{
     \end{array}}  \\
 \multicolumn{3}{l}{\begin{array}{lcl}
-    \_\mathit{MyDatabase}\_\mathit{data} & :: & \mathit{MyDatabaseState},\\
+    \_\mathit{MyDatabase}\_\mathit{data} & :: & \mathit{SqlDatabase},\\
     \_\mathit{MyDatabase}\_\mathit{sub}  & :: & s
     \end{array}}\\
 \} &&
@@ -132,7 +132,7 @@ Instantiating new objects requires us to set up the initial zipper configuration
 \end{array}
 \end{displaymath}
 
-\subsection{Casting}
+\subsection{Type casts}
 
 When an object is constructed, the view of the zipper is placed on the last element in the list -- the $\Delta$-object corresponding to the object class which is being instantiated. Its immediate ancestor is a $\Delta$-object corresponding to its superclass, which in turn may have its superclass as an ancestor, and so on. Such an object can be cast to a superclass by shifting the zipper's view to an ancestor, in which case the sub-class becomes a successor element (Figure \ref{fig:cast}). In this case, the type of the $\Delta$-object representing the sub-class is existentially-quantified and we no longer know anything about it, other than that it implements the same type class as the parent. For this reason, the zipper must first be traversed to construct the state of the whole object. it is therefore beneficial to be able to do this in layers using multiple state monad transformers.
 
