@@ -137,8 +137,12 @@ As an example of these combinators, consider an implementation of linked lists i
 \qquad \begin{array}{lcl}
 \mathit{appendEnd} & :: & \mathit{ListItem}~a \to () \\
 \mathit{appendEnd}~\mathit{item} & = & \mathbf{do} \\
- \multicolumn{3}{l}{\qquad \begin{array}{lcl}
-abc&&
+ \multicolumn{3}{l}{\qquad \begin{array}{l}
+\mathit{switch}~\mathit{next}~\$~\lambda case~x \to \\
+\qquad \begin{array}{lcl}
+\mathit{Nothing} & \to & \mathit{next} <: \mathit{Just}~\mathit{item} \\
+\mathit{(Just~\_)} & \to & \mathit{this}.!\mathit{next}.\$\mathit{appendEnd}~\mathit{item}
+\end{array}
 \end{array}}
 \end{array}
 \end{array}
