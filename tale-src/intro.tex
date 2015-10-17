@@ -8,7 +8,7 @@ In a purely functional programming language, such as Haskell, we might wish to w
 \mathit{runQuery} & :: & \mathit{String} \to \mathit{MyDatabase}~\mathit{SqlReader}
 \end{array}
 \end{displaymath}
-The database is represented by the $\mathit{SqlDatabase}$ type and is used as an argument to the $\mathit{State}$ type, which represents the state monad. For convenience, we define $\mathit{MyDatabase}$ an alias for this. The type of $\mathit{runQuery}$ tells us that, if given an SQL query represented as a string of characters, it will run the query using an underlying database and give us back a result, represented by the $\mathit{SqlReader}$ type.
+The database is represented by the $\mathit{SqlDatabase}$ type and is used as an argument to the $\mathit{State}$ type, which represents the state monad. For convenience, we define $\mathit{MyDatabase}$ as an alias for this. The type of $\mathit{runQuery}$ tells us that, if given an SQL query represented as a string of characters, it will run the query using an underlying database and give us back a result, represented by the $\mathit{SqlReader}$ type.
 The implementation of $\mathit{runQuery}$ is not important, but note that its codomain is $\mathit{MyDatabase}~\mathit{SqlReader}$, meaning that the result is returned with the effect of mutating a database. 
 
 Writing an application using just $\mathit{runQuery}$ may be prone to errors, however. For example, if the name of a table or column changes, all queries which refer to it must be updated as well. A common solution for this is to abstract over the entity model of the database, instead of writing SQL queries directly. For this purpose, we define a data type which represents our entity model. In this example, we have a table containing recipes, indexed by a unique, numeric identifier:
@@ -17,13 +17,12 @@ Writing an application using just $\mathit{runQuery}$ may be prone to errors, ho
 \multicolumn{3}{l}{\mathbf{data}~\mathit{Model} = \mathit{MkModel}~(\mathit{Map}~\mathit{Int}~\mathit{Recipe})}
 \end{array}
 \end{displaymath}
-The model caches all changes we make to the table and allows us to only update the database when we wish to do so. To implement this, we layer the model on top of the database using the state monad transformer $\mathit{StateT}$, creating a \emph{monad stack} in the process. Note that, for any type $s$, the $\mathit{State}~s$ type we have encountered previously is an alias\footnote{
-In many object-oriented languages $\textbf{class C}$ is an analogous
-synonym for $\textbf{class C extends Object}$.
+The model caches all changes we make to the table and allows us to only update the database when we wish to do so. To implement this, we layer the model on top of the database using the state monad transformer $\mathit{StateT}$, creating a \emph{monad stack} in the process. Note that, for any type $s$, the $\mathit{State}~s$ type we have encountered previously is a type synonym\footnote{
+In many object-oriented languages $\textbf{class}~\mathit{C}$ is an analogous
+synonym for $\textbf{class}~\mathit{C}~\mathbf{extends}~\mathit{Object}$.
 }
 for $\mathit{StateT}~s~\mathit{Identity}$ where $\mathit{Identity}$ is a monad
-whose only effect is (pure) function application:
-\amnote{Michael check `pure'  also alias vs synonym.}
+whose only effect is pure function application:
 \begin{displaymath}
 \begin{array}{lcl}
 \multicolumn{3}{l}{\mathbf{type}~\mathit{DbModel} = \mathit{StateT}~\mathit{Model}~\mathit{MyDatabase}}\\\\
@@ -44,7 +43,7 @@ From now on, we will refer to this as being unable to ``run on top of the monad 
 
 We wish to draw an analogy between these monad stacks and class inheritance.
 % Our example monad stack example corresponds to the following Java definitions:
-Our example monad stack example corresponds to Java definitions:
+Our monad stack example corresponds to Java definitions:
 \begin{displaymath}
 \begin{array}{lclc}
 \mathbf{class}~\mathit{MyDatabase} & \quad \{ & \mathit{SqlDatabase}~\mathit{db}; & \} \\
@@ -95,7 +94,7 @@ Interestingly, if we add names to the computations which can be run on a monad s
 
 In this work, we treat stacks of state monad transformers as objects and allow programmers to define classes of state monad transformer stacks.
 There is no need for explicit $\mathit{lift}$ and $\mathit{runState}$/$\mathit{runStateT}$ calls, but programmers
-are must follow the object-oriented structuring principle that
+must follow the object-oriented structuring principle that
 computations which make use of mutable state must be defined
 as part of these classes.
 Specifically, our contributions are:
