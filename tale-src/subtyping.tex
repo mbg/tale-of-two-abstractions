@@ -222,17 +222,17 @@ Method typings and fields are used to construct the type class representing $C$'
 \_\mathit{C}\_\mathit{invoke} :: \mathit{CLike}~o'~d'~(\mathit{StateT}~(s~\overline{\mathit{tyvar}})~m)~\overline{\mathit{tyvar}} \Rightarrow \\
 \qquad o'~\overline{\mathit{tyvar}} \to \\ \qquad (o'~\overline{\mathit{tyvar}} \to \mathit{StateT}~(s~\overline{\mathit{tyvar}})~m~(r,o'~\overline{\mathit{tyvar}})) \to\\\qquad
 o~\overline{\mathit{tyvar}} \to m~(r,o~\overline{\mathit{tyvar}},o'~\overline{\mathit{tyvar}}) \\
-\overline{\_\mathit{get}\_\mathit{field} :: o~\overline{\mathit{tyvar}} \to m~(\mathit{type}, o~\overline{\mathit{tyvar}}) } \\
-\overline{\_\mathit{get}\_\mathit{field}' :: \mathit{StateT}~(s~\overline{\mathit{tyvar}})~m~\mathit{type}} \\
-\overline{\_\mathit{set}\_\mathit{field} :: o~\overline{\mathit{tyvar}} \to \mathit{type} \to m~((),o~\overline{\mathit{tyvar}})} \\
-\overline{\_\mathit{set}\_\mathit{field}' :: \mathit{type} \to \mathit{StateT}~(s~\overline{\mathit{tyvar}})~m~()} \\
-\overline{\mathit{\_ecall\_method} :: o~\overline{\mathit{tyvar}} \to \overline{\mathit{arg} \to}~m~(\mathit{result},o~\overline{\mathit{tyvar}})}\\
-\overline{\_\mathit{icall\_method} :: \overline{\mathit{arg} \to}~ \mathit{StateT}~(s~\overline{\mathit{tyvar}})~m~\mathit{result} }
+\overline{\_\mathit{ext}\_\mathit{get}\_\mathit{field} :: o~\overline{\mathit{tyvar}} \to m~(\mathit{type}, o~\overline{\mathit{tyvar}}) } \\
+\overline{\_\mathit{int}\_\mathit{get}\_\mathit{field} :: \mathit{StateT}~(s~\overline{\mathit{tyvar}})~m~\mathit{type}} \\
+\overline{\_\mathit{ext}\_\mathit{set}\_\mathit{field} :: o~\overline{\mathit{tyvar}} \to \mathit{type} \to m~((),o~\overline{\mathit{tyvar}})} \\
+\overline{\_\mathit{int}\_\mathit{set}\_\mathit{field} :: \mathit{type} \to \mathit{StateT}~(s~\overline{\mathit{tyvar}})~m~()} \\
+\overline{\_\mathit{ext\_method} :: o~\overline{\mathit{tyvar}} \to \overline{\mathit{arg} \to}~m~(\mathit{result},o~\overline{\mathit{tyvar}})}\\
+\overline{\_\mathit{int\_method} :: \overline{\mathit{arg} \to}~ \mathit{StateT}~(s~\overline{\mathit{tyvar}})~m~\mathit{result} }
 \end{array}
 \end{array}
 \end{displaymath}
 
-For each field, there are two getters and two setters. One pair is used internally for calls within methods belonging to the same class, since the monad stack is already set up. The other is used when invoked on an object and sets up the monad stack before invoking the internal getter/setter. For every method, there are also two typings -- one used internally by methods in the same class and one used everywhere else. Additionally, the $\_\mathit{C}\_\mathit{invoke}$ method is used by sub-classes to invoke their own methods in a monad stack set up by $C$.
+For each field, there is a getter and a setter. Just like methods, each has an internal and an external version. Note that we treat getters and setters as state transformers, just like methods. We take the view that they are \emph{properties} as they are found in \emph{e.g.} C\#. That is, while we have the expectation that a getter gets the value of a field and that a setter sets the value of the field, both can also potentially be implemented as arbitrary methods with matching types. Additionally, the $\_\mathit{C}\_\mathit{invoke}$ method is used by sub-classes to invoke their own methods in a monad stack set up by $C$.
 
 An instance of this type class is generated as well as one for each type class belonging to an ancestor of $C$. Each external method's implementation pattern matches on the configuration of the object, adds a state monad transformer layer on top of the existing monad stack, and then either invokes its own, internal implementation of the method or propagates the call to a sub-class.
 
