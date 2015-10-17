@@ -81,7 +81,9 @@ In object-oriented languages, member access can be chained together using the $.
 \end{array}
 \end{array}
 \end{displaymath}
-Note that the $\mathit{This}$ type is defined as $\mathbf{data}~\mathit{This}~o~s~m~a$ and simply serves to capture the type arguments of instances of the $\mathit{Object}$ type class. The type of $.!$ is highly flexible. The left argument of the operator can be any type that is made an instance of the $\mathit{Object}$ class. Primarily, those are objects as the name would imply, but selectors and $\mathit{This}$ are also instances of $\mathit{Object}$. The right argument is always a selector. We use the $\mathit{QueryObject}$ and $\mathit{QueryMonad}$ type families to determine what object the selector will be accessing and what monad stack it will run on, depending on the left argument of $.!$.
+Note that the $\mathit{This}$ type is defined as $\mathbf{data}~\mathit{This}~o~s~m~a = \mathit{MkThis}$ and simply serves to capture the type arguments of instances of the $\mathit{Object}$ type class. The type of $.!$ is highly flexible. The left argument of the operator can be any type that is made an instance of the $\mathit{Object}$ class. Primarily, those are objects as the name would imply, but selectors and $\mathit{This}$ are also instances of $\mathit{Object}$. The right argument is always a selector. We use the $\mathit{QueryObject}$ and $\mathit{QueryMonad}$ type families to determine what object the selector will be accessing and what monad stack it will run on, depending on the left argument of $.!$.
+
+The $.!$ operator is right-associative so that we can build up larger selectors and ultimately decide whether the call should be internal or external, depending on whether we apply it to an object or $\mathit{this}$.
 
 The type of selector we obtain from composing two selectors is determined by a closed type function:
 \begin{displaymath}
@@ -96,6 +98,7 @@ The type of selector we obtain from composing two selectors is determined by a c
 \end{array}
 \end{array}
 \end{displaymath}
+Intuitively, the result of composing two selectors can only be a mutable selector if both of the original selectors are also mutable. 
 
 In most object-oriented languages, $\mathit{null}$ is automatically a value of all reference types. Members of a field or variable can be accessed without checking whether the value is $\mathit{null}$ or not, frequently leading to runtime errors which are difficult to track down. Functional languages, such as ML or Haskell, do not have $\mathit{null}$ values -- they have a better solution: the option type. In Haskell, this type is called $\mathit{Maybe}$ and is defined as:
 \begin{displaymath}
@@ -103,43 +106,57 @@ In most object-oriented languages, $\mathit{null}$ is automatically a value of a
 \mathbf{data}~\mathit{Maybe}~a & = & \mathit{Nothing} \mid \mathit{Just}~a
 \end{array}
 \end{displaymath}
-In other words, a value of type $\mathit{Maybe}~a$ is either $\mathit{Nothing}$ -- the rough equivalent of $\mathit{null}$ -- or $\mathit{Just}~x$ for some $x :: a$. Case analysis must be performed on every such value to determine whether it contains a value of type $a$ or not. Functions expecting an argument of type $a$ cannot be applied to a value of type $\mathit{Maybe}~a$. Object-oriented languages have recently begun to adapt this type as a type-safe alternative in favour of $\mathit{null}$. However, checking whether a value is $\mathit{Nothing}$ or not can still be tedious. 
+In other words, a value of type $\mathit{Maybe}~a$ is either $\mathit{Nothing}$ -- the rough equivalent of $\mathit{null}$ -- or $\mathit{Just}~x$ for some $x :: a$. Case analysis must be performed on every such value to determine whether it contains a value of type $a$ or not. Functions expecting an argument of type $a$ cannot be applied to a value of type $\mathit{Maybe}~a$. Object-oriented languages have recently begun to adapt this type as a type-safe alternative in favour of $\mathit{null}$. However, checking whether a value is $\mathit{Nothing}$ or not can still be tedious if, for example, we wish to only run some function if a certain value is not $\mathit{null}$. C\#, for example, has recently introduced the $.?$ operator which can be used in place of $.$. The member on the right of $.?$ will only be accessed if the value on the left is not the equivalent of $\mathit{Nothing}$.
 
-A second composition operator
+As functional programmers, we know that C\#'s $.?$ operator is really just a specialised version of $\mathit{fmap}$, because the option type is a functor. In our library, we have a $.\$$ operator in addition to $.!$, which fulfils the same role as C\#'s $.?$ operator, except that it is not specialised to the option time. Instead, it works for any type that is an instance of the $\mathit{Functor}$ type class. We believe that this is further evidence that, by combining ideas from both paradigms, we can 
 
 \subsection{Combinators}
 
-When used in \emph{e.g.} the $<:$ operator, the appropriate setter is extracted from the record and applied to the new value for the field:
+Field selectors can be assigned new values in the definition of a method using the $<:$ operator. It is defined as follows: 
 \begin{displaymath}
 \begin{array}{l}
-(<:)  ::  \mathit{Monad}~m \Rightarrow \mathit{Field}~o~s~m~\mathit{val} \to \mathit{val} \to \mathit{StateT}~s~m~()\\
-(\mathit{MkField}~\_~\_~\_~s') <: val  =  s val
+(<:)  ::  \mathit{Monad}~m \Rightarrow \mathit{Selector}~\mathit{Mutable}~o~s~m~\mathit{val} \to \mathit{val} \to \mathit{StateT}~s~m~()\\
+(\mathit{MkField}~\_~\_~\_~s') <: val  =  s' val
 \end{array}
 \end{displaymath}
-Objects and selectors can be combined using the $.!$ operator which in turn constructs a new selector which can then be used by one of the combinators. The $.!$ is part of the $\mathit{Object}$ type class which in our implementation is the super class of all objects, instead of $\mathit{Monad}$, although $\mathit{Monad}$ is still the superclass of $\mathit{Object}$:
+Note that method selectors cannot be supplied as an argument to $<:$ since we explicitly require the selector to be tagged as $\mathit{Mutable}$. Haskell's type system then ensures that this is adhered to.
+
+Every external call returns a pair consisting of a result as well as an updated object. A language like Java would just mutate the object on which the external call was made, but since our system is pure and values are immutable, this cannot be done. Surrounding external calls with $\mathit{fst}$ and $\mathit{snd}$ may seem a bit cryptic, so instead we provide aliases named $\mathit{result}$ and $\mathit{object}$ for the projections, respectively. 
+
+We will often want to perform case analysis on the value of a member within a method. Instead of first binding the value to a variable and then using $\mathbf{case}$ on it, we provide a shortcut. The $\mathit{switch}$ combinator has type $\mathit{Monad}~m \Rightarrow \mathit{Selector}~\mathit{ty}~o~s~m~\mathit{val} \to (\mathit{val} \to \mathit{StateT}~s~m~b) \to \mathit{StateT}~s~m~b$.
+
+As an example of these combinators, consider an implementation of linked lists in the object-oriented style:
+
 \begin{displaymath}
 \begin{array}{l}
-\mathbf{class}~\mathit{Monad}~m \Rightarrow \mathit{Object}~\mathit{obj}~m~\mathbf{where}\\
-\quad (.!) :: \mathit{obj} \to \mathit{Selector}~\mathit{obj}~s~m~\mathit{arg}~\mathit{ret} \to \\ \qquad \mathit{Selector}~\mathit{obj}~s~m~\mathit{arg}~\mathit{ret}
+\mathbf{state}~\mathit{ListItem}~a~\mathbf{where} \\
+\qquad \begin{array}{lcl}
+\mathbf{data}~\mathit{value} & :: & a \\
+\mathbf{data}~\mathit{next}  & :: & \mathit{Maybe}~(\mathit{ListItem}~a)
+\end{array}\\\\
+\qquad \begin{array}{lcl}
+\mathit{appendEnd} & :: & \mathit{ListItem}~a \to () \\
+\mathit{appendEnd}~\mathit{item} & = & \mathbf{do} \\
+ \multicolumn{3}{l}{\qquad \begin{array}{l}
+\mathit{switch}~\mathit{next}~\$~\lambda case~x \to \\
+\qquad \begin{array}{lcl}
+\mathit{Nothing} & \to & \mathit{next} <: \mathit{Just}~\mathit{item} \\
+\mathit{(Just~\_)} & \to & \mathit{this}.!\mathit{next}.\$\mathit{appendEnd}~\mathit{item}
 \end{array}
-\end{displaymath}
-There is one instance of this class for all base object classes:
-\begin{displaymath}
-\begin{array}{l}
-\mathbf{instance}~\mathit{Object}~a~\mathit{Identity}~\mathbf{where}\\
-\quad \begin{array}{lcl}
-\mathit{obj}~.!~(\mathit{MkMethod}~\mathit{int}~\mathit{ext}) & = & \\
-\multicolumn{3}{l}{\quad \mathit{MkCall}~ \$~\lambda \mathit{arg} \to \mathit{runIdentity}~\$~\mathit{ext}~\mathit{obj}~\mathit{arg} } %\\
-%\mathit{obj}~.!~(\mathit{MkField}~g~\_~s~\_) & = & \\
-% \multicolumn{3}{l}{\quad \mathit{MkCall}~\$~\mathit{const}~\$~\mathit{runIdentity}~\$ ~g~\mathit{obj}}
+\end{array}}
 \end{array}
-\end{array}
-\end{displaymath}
-For example, if an object is combined with a selector, then we create a wrapper function around the method after applying it to the object. $\mathit{MkCall}$ values are then used by \emph{e.g.} the $\mathit{object}$ and $\mathit{result}$ combinators as follows:
-\begin{displaymath}
-\begin{array}{l}
-\mathit{object} :: \mathit{Selector}~o~s~\mathit{Identity}~\mathit{arg}~\mathit{ret} \to arg \to o\\
-\mathit{object}~(\mathit{MkCall}~\mathit{call})  = \mathit{snd} \circ \mathit{call}
 \end{array}
 \end{displaymath}
 
+\subsection{Normal type classes}
+
+Objects generated by our library can be made instances of ``normal'' Haskell type classes, removing the need for object-oriented-style interfaces. For example, we could write the following to make $\mathit{Val}$ objects an instance of the $\mathit{Show}$ type class:
+\begin{displaymath}
+\begin{array}{l}
+\mathbf{instance}~\mathit{Show}~\mathit{Val}~\mathbf{where}\\
+\qquad \begin{array}{lcl}
+\mathit{show}~\mathit{obj} & = & \mathit{show}~(\mathit{result}~(\mathit{obj}.!\mathit{value})) 
+\end{array}
+\end{array}
+\end{displaymath}
+We believe that this, together with the flexibility of selectors, shows that our system is not an entirely different world from existing Haskell code, but can be used in combination with it.
