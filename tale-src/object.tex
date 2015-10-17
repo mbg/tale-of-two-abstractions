@@ -1,12 +1,15 @@
 \section{Monad stacks and object-orientation}
+\label{sec:objects}
 
-Consider the database example from Section 1. As the programmer, we know when writing the $\mathit{saveChanges}$ function that $\mathit{runQuery}$ can be run on a smaller part of our monad stack. \emph{I.e.} it requires the monad stack to be $\mathit{State}~\mathit{SqlDatabase}$, while the monad stack of $\mathit{saveChanges}$ also provides more state on top of that. As a result of this type incompatibility, we must use $\mathit{lift}$ to execute, in this case, the $\mathit{runQuery}$ function on the layer of the monad stack which corresponds to the one expected by $\mathit{runQuery}$. If this layer is multiple levels away from the top of the stack, multiple, successive calls to $\mathit{lift}$ are required.
+Consider the database example from Section 1. As the programmer, we know when writing the $\mathit{saveChanges}$ function that $\mathit{runQuery}$ can be run on a smaller part of our monad stack. \emph{I.e.} it requires the monad stack to be $\mathit{State}~\mathit{SqlDatabase}$, while the monad stack of $\mathit{saveChanges}$ also provides additional state on top of that. As a result of this type incompatibility, we must use $\mathit{lift}$ to wrap, in this case, the $\mathit{runQuery}$ function up in the type that corresponds to the one expected by $\mathit{saveChanges}$. If this layer is several levels away from the top of the stack, several, successive calls to $\mathit{lift}$ are required.
 
-Let us refer to function calls where a monad stack has already been set up as \emph{internal calls} as opposed to \emph{external calls} where a monad stack has not yet been set up using the required $\mathit{runX}$ functions, such as \emph{e.g.} $\mathit{runStateT}$. We will address external calls later in this section. 
+Let us refer to function calls which can be run on top of the monad stack -- \emph{i.e.} those functions which can directly be composed using $\bind$, with or without the help of $\mathit{lift}$ -- as \emph{internal calls} as opposed to \emph{external calls} which must be wrapped into calls to $\mathit{runX}$ functions, such as \emph{e.g.} $\mathit{runStateT}$, first. We will address internal calls first, before moving on to external calls later in this section. 
 
 \subsection{Internal calls}
 
-Most monadic computations in Haskell are represented by values of some data type which are combined with $\bind$ and ultimately evaluated by some corresponding $\mathit{runX}$ function. Monad stacks are therefore just nested data types. A monadic computation, such as $\mathit{runQuery}$ returns a value of the data type corresponding to the monad stack it runs on. Since $\mathit{runQuery}$ and $\mathit{saveChanges}$ run on top of different monad stacks, they return values of different, incompatible types. In order to use $\mathit{runQuery}$ on top of the same monad stack as $\mathit{saveChanges}$, it must return a value of the same type. In other words, we really want $\mathit{runQuery}$ to be an overloaded function which returns a value of the data type corresponding to the context in which it is called. Overloading in Haskell is achieved through type classes, so instead of defining $\mathit{runQuery}$ as a global function with a specific type, we should instead define it as part of a type class:
+Most monadic computations in Haskell are represented by values of some data type, which can be combined with $\bind$ and ultimately evaluated by some corresponding $\mathit{runX}$ function. Monad transformers are therefore the data types belonging to monads, which are parametrised over and defined in terms of the data type belonging to some arbitrary monad. A monadic computation, such as $\mathit{runQuery}$ returns a value of the data type corresponding to the monad stack it runs on. Since $\mathit{runQuery}$ and $\mathit{saveChanges}$ run on top of different monad stacks, they return values of different, incompatible types. In order to use $\mathit{runQuery}$ on top of the same monad stack as $\mathit{saveChanges}$, it must return a value of the same type, because otherwise it cannot be composed using $\bind$ with other computations in the sequence. 
+
+In other words, we really want $\mathit{runQuery}$ to be an overloaded function which returns a value of the monadic data type corresponding to the other computations in the same sequence. Overloading in Haskell is achieved through type classes, so instead of defining $\mathit{runQuery}$ as a global function with a specific type, we should instead define it as part of a type class:
 \begin{displaymath}
 \begin{array}{l}
 \mathbf{class}~\mathit{SqlDatabaseCtx}~m~\mathbf{where}\\
@@ -15,7 +18,7 @@ Most monadic computations in Haskell are represented by values of some data type
 \end{array}
 \end{array}
 \end{displaymath}
-This type class has a single parameter $m$ which represents the context in which $\mathit{runQuery}$ should be callable. In other words, $m$ should be the data type which corresponds to a monad stack on top of which $\mathit{runQuery}$ can be run. To restore the old functionality, we must provide an instance for $\mathit{SqlDatabaseCtx}$ for the most basic monad stack on top of which $\mathit{runQuery}$ can be run\footnote{Note that this requires the \texttt{FlexibleInstances} language extension.}:
+This type class has a single parameter $m$ which represents the context in which $\mathit{runQuery}$ should be callable. In other words, $m$ should be the data type which corresponds to a monad stack on top of which $\mathit{runQuery}$ can be run. To restore the old functionality, we must provide an instance for $\mathit{SqlDatabaseCtx}$ for the simplest monad stack on top of which $\mathit{runQuery}$ can be run\footnote{Note that this requires the \texttt{FlexibleInstances} language extension.}:
 \begin{displaymath}
 \begin{array}{l}
 \mathbf{instance}~\mathit{SqlDatabaseCtx}~\mathit{MyDatabase}~\mathbf{where}\\
@@ -24,7 +27,7 @@ This type class has a single parameter $m$ which represents the context in which
 \end{array}
 \end{array}
 \end{displaymath}
-We once again omit the exact definition of $\mathit{runQuery}$, but it remains unchanged from the previous implementation. In order to call $\mathit{runQuery}$ from the extended monad stack used by $\mathit{saveChanges}$, we need a second instance for its monad stack:
+We once again omit the exact definition of $\mathit{runQuery}$, but it remains unchanged from the previous implementation. In order to call $\mathit{runQuery}$ on the monad stack used by $\mathit{saveChanges}$, we need a second instance for this particular monad stack:
 \begin{displaymath}
 \begin{array}{l}
 \mathbf{instance}~\mathit{SqlDatabaseCtx}~\mathit{DbModel}~\mathbf{where}\\
@@ -33,7 +36,7 @@ We once again omit the exact definition of $\mathit{runQuery}$, but it remains u
 \end{array}
 \end{array}
 \end{displaymath}
-We can now rewrite the definition of $\mathit{saveChanges}$ to get rid of the explicit call to $\mathit{lift}$:
+This bears similarity to, for example, the type-theoretic account of object-oriented programming given by Pierce and Turner\cite{pierce1994simple}, where methods inherited from parental classes must also be adapted in a similar style. We can now rewrite the definition of $\mathit{saveChanges}$ to get rid of the explicit call to $\mathit{lift}$:
 \begin{displaymath}
 \begin{array}{lcl}
 \mathit{saveChanges} & :: & \mathit{DbModel}~() \\
@@ -47,17 +50,18 @@ We can now rewrite the definition of $\mathit{saveChanges}$ to get rid of the ex
 \end{array} }
 \end{array}
 \end{displaymath}
-
-\textbf{TODO: Some concluding remarks about names; relation to the expression problem}\\
-\textbf{TODO: Say something about monad stacks being ``interpreters'' for inheritance}
+Instead of having to write $\mathit{lift}~(\mathit{runQuery}~\mathit{query})$ every time we wish to use $\mathit{runQuery}$ in computations belonging to our entity model, we can just write $\mathit{runQuery}$ by itself. This saves us from having to write $\mathit{lift}$ every time $\mathit{runQuery}$ is used, at the cost of having to declare $\mathit{runQuery}$ as part of a type class and providing an implementation for every context in which we wish to use it. We must also know of all computations we wish to use in this style when we declare, in this case, the $\mathit{SqlDatabaseCtx}$ type class. Although, right now there is nothing that stops us from having several type classes per monad stack, we will not have this luxury later on, exposing the relationship to the expression problem.
 
 \subsection{Monad stack configurations}
+\label{sec:configurations}
 
-Since monadic computations are just values of some data type, they cannot just be evaluated like a regular function. Instead, each monad $X$ has a corresponding $\mathit{runX}$ function which can be used to evaluate a computation. If we have a stack of monads, then successive calls to these functions are required for each layer in the stack, as shown in Section 1. This is often cumbersome as the programmer has to remember to insert the calls to these $\mathit{runX}$ functions, place them in the right order, and supply them with the right arguments.
+Since monadic computations are just values of some data type, they cannot just be invoked like normal functions. Instead, each monad $X$ has a corresponding $\mathit{runX}$ function which can be used to evaluate a computation in the presence of its effect. If we have a stack of monads, then successive calls to these functions are required for each layer in the stack, as shown in Section 1. This is often cumbersome as the programmer has to remember to insert the calls to these $\mathit{runX}$ functions, place them in the right order, and supply them with the right arguments. Instead, we would much rather like to just supply the monadic computation with its initial configuration, such as the initial state of the state monad, in the same style that a method is invoked on an object. For example, instead of writing $\mathit{runState}~\mathit{foo}~\mathit{state}$, we want to write the equivalent of $\mathit{state}.\mathit{foo}$ and similarly for more complicated stacks of monads. This is what we refer to as \emph{external calls}, while an internal call is one that does not require a ``configuration'' to be supplied -- \emph{i.e.} the equivalent of a call that can optionally be prefixed by $\mathbf{this}$ in Java. 
 
-Let us introduce a notation of \emph{monad stack configurations} or, more simply, ``objects''. An object in our system is a value which, when supplied to an external call, provides all the required information to set up an appropriate monad stack for that computation. In other words, the external call first becomes an interpreter for the object which calls the appropriate $\mathit{runX}$ functions in an order specified by the object, before making the internal call corresponding to itself on top of the newly constructed monad stack. Finally, the external call will return an updated object as well as a result. For this paper, we will only consider objects corresponding to state monads,
+Before we can show how to implement external calls, let us first introduce a notation of \emph{monad stack configurations} or, more simply, ``objects''. An object in our system is a value which describes the layers of a monad stack. Each layer is described by what we will call a $\Delta$-object. When an object is supplied as part of an external call, it provides all the required information for the callee to call the appropriate $\mathit{runX}$ functions and in the appropriate order, so that the monadic computation corresponding to the call can be evaluated. In other words, the function invoked for an external call is a wrapper around the monadic computation which traverses the $\Delta$-objects within an object. Once the monadic computation has been evaluated, the wrapper will return an updated object as well as a result to the caller. For this paper, we will only consider $\Delta$-objects corresponding to state monads, although in principle nothing prohibits us from constructing $\Delta$-objects which correspond to other monads.
 
-Before we look at the behaviour of external calls in detail, let us define the structure of objects. Objects are represented using an algebraic data type. \textbf{TODO: explain what a class is} For a base class -- a class which has no ancestors -- there is only one possible data constructor. For the $\mathit{MyDatabase}$ monad from our running example, we would have:
+Objects and $\Delta$-objects are represented using algebraic data types. In the case of the bottom layer of a monad stack, there is only a single $\Delta$-object which makes up the object. We assume that there exists some specification for the structure of the monad stack which we shall refer to as \emph{object classes}. An object class can either be a \emph{base class}, representing the bottom of a monad stack, or a \emph{sub-class}, representing an extension to some other monad stack. For state monads and this paper, we may think of them as the same as Java classes. Each class contains a set of fields, representing the state of the corresponding state monad, as well as a set of methods, representing the monadic computations which are part of a corresponding type class and can automatically be $\mathit{lift}$ed. 
+
+The type of $\Delta$-objects for an object class describing the $\mathit{MyDatabase}$ monad from our running example can be defined as follows:
 \begin{displaymath}
 \begin{array}{lcl}
 \mathbf{data}~\mathit{MyDatabaseObj} & = & \mathit{MkMyDatabaseData}~\{ \\
@@ -65,7 +69,9 @@ Before we look at the behaviour of external calls in detail, let us define the s
 \} && 
 \end{array}
 \end{displaymath}
+Perhaps surprisingly, the object only stores the initial state of the monad stack represented by $\mathit{MyDatabase}$, namely $\mathit{State}~\mathit{SqlDatabase}$, but no indication that this $\Delta$-object represents a state monad layer in the stack. This is left to the wrapper function we will implement for the external call and is discussed in the following section. Since there is a 1:1 relationship between a $\Delta$-object and the corresponding type class, we can hard-code a $\mathit{runStateT}$ call for its instances.
 
+For $\mathit{DbModel}$, the type of corresponding $\Delta$-objects looks as shown below:
 \begin{displaymath}
 \begin{array}{lcl}
 \mathbf{data}~\mathit{DbModelObj} & = & \mathit{MkDbModelData}~\{ \\
@@ -76,15 +82,120 @@ Before we look at the behaviour of external calls in detail, let us define the s
 \} && 
 \end{array}
 \end{displaymath}
+In addition to the state monad's initial state, we also store a $\Delta$-object belonging to the parental layer in the monad stack. Unlike in most object-oriented languages, where the inherited state is merged into a sub-class's state, we keep them separate. The reasoning for this is twofold: firstly, it saves us from having to copy and paste code, but secondly, and more importantly, the states need to be separate when the calls to $\mathit{runStateT}$ are made. The configuration required to call $\mathit{saveChanges}$ from our example can now be constructed as follows:
+\begin{displaymath}
+\mathit{config} = \mathit{MkDbModelData}~\mathit{emptyModel}~(\mathit{MkMyDatabaseData}~\mathit{initialDatabase})
+\end{displaymath}
+Importantly, instead of having two separate values for the monad stack's state, we have combined them into one configuration, although they are still separate within this configuration. The wrapper for an external call can traverse such a configuration to set up the monad stack layer-by-layer.
 
 \subsection{External calls}
 
+Every computation that is part of an object class can be called internally or externally. In this section, we show how to implement the wrapper functions for the external calls. For now, we use distinct names for the internal and external versions of a computation. However, we show how both can share the same name in Section \ref{sec:th}. 
+
+To begin, we need to change how the type classes which represent the interfaces of our object classes are constructed. For $\mathit{SqlDatabase}$ we now have:
 \begin{displaymath}
 \begin{array}{l}
 \mathbf{class}~\mathit{SqlDatabaseCtx}~\mathit{obj}~\mathit{st}~m \mid \mathit{obj} \to \mathit{st}, \mathit{st} \to \mathit{obj}~\mathbf{where}\\
 \qquad \begin{array}{lcl}
-\mathit{runQuery\_int} & :: & \mathit{String} \to \mathit{StateT}~\mathit{st}~m~\mathit{SqlReader} \\
-\mathit{runQuery\_ext} & :: & \mathit{obj} \to \mathit{String} \to m~(\mathit{SqlReader}, \mathit{obj})
+\mathit{\_\mathit{sqlDatabaseCtx\_invoke}} & :: & \\
+\multicolumn{3}{l}{\qquad \mathit{SqlDatabaseCtx}~\mathit{obj}'~\mathit{st}'~(\mathit{StateT}~\mathit{st}~\mathit{m}) \Rightarrow}\\
+\multicolumn{3}{l}{\qquad \mathit{obj}' \to (\mathit{obj}' \to \mathit{StateT}~\mathit{st}~m~(r,\mathit{obj}')) \to} \\
+\multicolumn{3}{l}{\qquad \mathit{obj} \to m~(r,\mathit{obj},\mathit{obj}')} \\\\
+\mathit{\_int\_runQuery} & :: & \mathit{String} \to \mathit{StateT}~\mathit{st}~m~\mathit{SqlReader} \\
+\mathit{\_ext\_runQuery} & :: & \mathit{obj} \to \mathit{String} \to m~(\mathit{SqlReader}, \mathit{obj})
+\end{array}
+\end{array}
+\end{displaymath}
+While we previously had a single-parameter type class whose parameter represented the type corresponding to a monad stack, we now have a multi-parameter type class with three parameters: $\mathit{obj}$ represents the type of an object which describes a monad stack capable of supporting the computations in the interface, $\mathit{st}$ which represents the state added by the object class of $\mathit{obj}$, and $m$ which represents the type of the parental context in which we wish to call the methods -- more on this later. 
+
+We use functional dependencies\cite{jones2000type} to indicate that the object and state type uniquely determine each other. Therefore, only one needs to be known during type inference, in order to select an instance of the type class, even if it is not clear from a context what the type of the other parameter is.
+
+The type class contains three methods: $\mathit{\_sqlDatabaseCtx\_invoke}$ which we will discuss later, and the internal and external versions of $\mathit{runQuery}$. Note that the type of the internal version of $\mathit{runQuery}$, with prefix $\_\mathit{int}\_$\footnote{As a convention, we will always use names starting with $\_$ to indicate definitions which are only meant to be used internally by our encoding.}, has changed as a result. Instead of $m~\mathit{SqlReader}$ where $m$ is the type corresponding to the full monad stack, we now assemble the type of the top layer in the method's type. This is necessary, because we must refer to the same $m$ in the type of $\mathit{runQuery\_ext}$. The type class instance(s) belonging to a $\Delta$-object can only call the $\mathit{runX}$ function for the layer in the monad stack which they represent and must therefore already be invoked from a context where the $\mathit{runX}$ functions for the monad stack up to that point have been invoked. To illustrate this procedure, the updated instance belonging to the $\mathit{MyDatabase}$ layer in our example is now:
+\begin{displaymath}
+\begin{array}{l}
+\mathbf{instance}~\mathit{SqlDatabaseCtx}~\mathit{MyDatabaseObj}~\mathit{SqlDatabase}~\mathit{Identity}~\mathbf{where}\\
+\qquad \begin{array}{lcl}
+\mathit{\_\mathit{sqlDatabaseCtx\_invoke}}~\mathit{obj}~f~(\mathit{MkMyDatabaseData}~d) & = & \mathbf{do}\\
+\multicolumn{3}{l}{\qquad \begin{array}{lcl}
+((r, \mathit{obj'}, d')) & \leftarrow & \mathit{runStateT}~(f~\mathit{obj})~d \\
+\multicolumn{3}{l}{\mathit{return}~(r, \mathit{MkMyDatabaseData}~d'), \mathit{obj}'}
+\end{array}}
+\\\\
+\mathit{\_int\_runQuery}~\mathit{query} & = & ~\ldots \\
+\mathit{\_ext\_runQuery}~(\mathit{MkMyDatabaseData}~\mathit{d})~v & = & \mathbf{do} \\
+\multicolumn{3}{l}{\qquad (r,d') \leftarrow \mathit{runStateT}~(\mathit{runQuery\_int}~v)~d } \\ 
+\multicolumn{3}{l}{\qquad \mathit{return}~(r, (\mathit{MkMyDatabaseData}~d')) } 
+\end{array}
+\end{array}
+\end{displaymath}
+The implementation of $\mathit{runQuery}$ still remains unchanged and is omitted for brevity, but is given the name $\mathit{\_int\_runQuery}$ here. Additionally, we now have the $\mathit{\_ext\_runQuery}$ method which inspects an object of type $\mathit{MyDatabaseObj}$, extracts the state, and uses it as the initial state for an invocation of $\mathit{runStateT}$. In this case, the $\mathit{MkMyDatabaseData}$ constructor represents an instance of a $\mathit{MyDatabaseObj}$ object and the computation evaluated by $\mathit{runStateT}$ is therefore the actual implementation of the $\mathit{runQuery}$ function. Finally, $\mathit{\_ext\_runQuery}$ returns the result obtained from the computation and wraps the state back up in an $\mathit{MyDatabaseObj}$ object.
+
+In order to call the $\mathit{runX}$ functions in the correct order, we must start from the bottom of the monad stack and work our way towards the top. However, if we make an external call to a sub-class object, then we are not starting at the bottom, but either somewhere in the middle of the stack or at the top. The $\_\mathit{sqlDatabaseCtx\_invoke}$ function is intended to work around this obstacle. One such $\_\mathit{invoke}$ function has to be added to every type class describing the interface of a layer in a monad stack. The process by which it works is illustrated in Figure \ref{fig:invoke}. 
+
+All sub-classes have two instances of every type class they have to implement: one where $m$ is the type of the parental monad stack and one where $m$ is set to $\mathit{Identity}$. When an external call is made to a sub-class object, the instance of the appropriate type class where $m = \mathit{Identity}$ is selected. The implementation of the external version of a computation in this instance, such as $\_\mathit{ext}\_\mathit{saveChanges}$ in Figure \ref{fig:invoke}, forwards the call to its parent using the respective $\_\mathit{invoke}$ function. This continues until the base class is reached, whose only type class instance is for $m = \mathit{Identity}$. From this point onwards, the process proceeds as we have seen before. The base class invokes the $\mathit{runX}$ function for the first layer and forwards the call to the next $\Delta$-object in line, from the bottom to the top using the primary type class instances for the $\Delta$-objects, where $m$ is the type of the respective parental monad stack. 
+
+\begin{figure}
+    \begin{center}
+        \begin{tikzpicture}[node distance=9.0cm,auto,>=latex']
+        \node [int] (c)  {$\mathit{MyDatabaseObj}$};
+        \node [int,pin={[init]above:View}] (d) [right of=c] {$\mathit{DbModelObj}$};
+        \node (b) [below of=d,node distance=1cm, coordinate] {a};
+        
+        \path[->] ([yshift=1ex]c.east) edge node {$\mathit{runStateT~\_ext\_saveChanges}$} ([yshift=1ex]d.west);
+        \path[->] ([yshift=-1ex]d.west) edge node {$\mathit{\_sqlDatabaseCtx}\_\mathit{invoke}~\mathit{\_ext\_saveChanges}$} ([yshift=-1ex]c.east);
+        \path[->] (b.north) edge node [below, pos=-0] {$\mathit{\_ext\_saveChanges~config}$} (d.south);
+        \end{tikzpicture} 
+    \end{center}
+    \caption{Invoking $\mathit{saveChanges}$ on an $\mathit{DbModelObj}$ object $\mathit{config}$} \label{fig:invoke}
+\end{figure}
+
+The $\mathit{DbModel}$ layer in our example has its own type class, for which $\mathit{SqlDatabaseCtx}$ is a super-class. This means that for every instance of $\mathit{DbModelCtx}$, there must also be an instance of $\mathit{SqlDatabaseCtx}$:
+\begin{displaymath}
+\begin{array}{l}
+\mathbf{class}~\mathit{SqlDatabaseCtx}~\mathit{obj}~\mathit{st}~m \Rightarrow \\
+\quad \mathit{DbModelCtx}~\mathit{obj}~\mathit{st}~m \mid \mathit{obj} \to \mathit{st}, \mathit{st} \to \mathit{obj}~\mathbf{where}\\\\
+\qquad \begin{array}{lcl}
+\mathit{\_\mathit{dbModelCtx\_invoke}} & :: & \\
+\multicolumn{3}{l}{\qquad \mathit{DbModelCtx}~\mathit{obj}'~\mathit{st}'~(\mathit{StateT}~\mathit{st}~\mathit{m}) \Rightarrow}\\
+\multicolumn{3}{l}{\qquad \mathit{obj}' \to (\mathit{obj}' \to \mathit{StateT}~\mathit{st}~m~(r,\mathit{obj}')) \to} \\
+\multicolumn{3}{l}{\qquad \mathit{obj} \to m~(r,\mathit{obj},\mathit{obj}')} \\\\
+\mathit{\_int\_saveChanges} & :: & \mathit{StateT}~\mathit{st}~m~\mathit{()} \\
+\mathit{\_ext\_saveChanges} & :: & \mathit{obj} \to m~(\mathit{()}, \mathit{obj})
+\end{array}
+\end{array}
+\end{displaymath}
+
+\begin{displaymath}
+\begin{array}{l}
+\mathbf{instance}~\mathit{DbModelCtx}~\mathit{DbModelObj}~(\mathit{Map}~\mathit{Int}~\mathit{Recipe})~\mathit{MyDatabase}~\mathbf{where}\\\\
+\qquad \begin{array}{lcl}
+\mathit{\_\mathit{dbModelCtx\_invoke}} & :: & \\
+\multicolumn{3}{l}{\qquad \mathit{DbModelCtx}~\mathit{obj}'~\mathit{st}'~(\mathit{StateT}~\mathit{st}~\mathit{m}) \Rightarrow}\\
+\multicolumn{3}{l}{\qquad \mathit{obj}' \to (\mathit{obj}' \to \mathit{StateT}~\mathit{st}~m~(r,\mathit{obj}')) \to} \\
+\multicolumn{3}{l}{\qquad \mathit{obj} \to m~(r,\mathit{obj},\mathit{obj}')} \\\\
+\mathit{\_int\_saveChanges} & :: & \mathit{StateT}~\mathit{st}~m~\mathit{()} \\
+\mathit{\_ext\_saveChanges} & :: & \mathit{obj} \to m~(\mathit{()}, \mathit{obj})
+\end{array}
+\end{array}
+\end{displaymath}
+
+% may need a lambda in the recursive invoke call
+
+\begin{displaymath}
+\begin{array}{l}
+\mathbf{instance}~\mathit{DbModelCtx}~\mathit{DbModelObj}~(\mathit{Map}~\mathit{Int}~\mathit{Recipe})~\mathit{Identity}~\mathbf{where}\\
+\qquad \begin{array}{lcl}
+\mathit{\_\mathit{dbModelCtx\_invoke}}~\mathit{obj}~\mathit{f}~(\mathit{MkDbModelData}~p~d) & = & \mathbf{do} \\
+\multicolumn{3}{l}{\qquad \mathit{(r,p',\mathit{MkDbModelData}~\_~d) \leftarrow}}\\
+\multicolumn{3}{l}{\qquad \qquad \mathit{\_myDatabaseCtx\_invoke}~\mathit{obj}~\mathit{f}~p} \\
+\multicolumn{3}{l}{\qquad \mathit{return}~(r,\mathit{MkDbModelData}~p'~d)} \\\\
+\multicolumn{3}{l}{\qquad \mathit{obj}' \to (\mathit{obj}' \to \mathit{StateT}~\mathit{st}~m~(r,\mathit{obj}')) \to} \\
+\multicolumn{3}{l}{\qquad \mathit{obj} \to m~(r,\mathit{obj},\mathit{obj}')} \\\\
+
+\mathit{\_ext\_saveChanges}~\mathit{obj}@(\mathit{MkDbModelData}~p~\_) & = & \mathbf{do} \\
+\multicolumn{3}{l}{\qquad (r,p',\mathit{MkDbModelData}~\_~d) \leftarrow} \\
+\multicolumn{3}{l}{\qquad \qquad \mathit{\_myDatabaseCtx\_invoke}~\mathit{obj}~\mathit{\_ext\_saveChanges}~p} \\
+\multicolumn{3}{l}{\qquad \mathit{return}~(r,\mathit{MkDbModelData}~p'~d)}
 \end{array}
 \end{array}
 \end{displaymath}

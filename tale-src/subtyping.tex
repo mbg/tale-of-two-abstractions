@@ -1,80 +1,51 @@
 \section{Subtyping}
 \label{sec:encoding}
 
-A pleasant property of class hierarchies in object-oriented languages is that they are open for extension.
-
-\textbf{COPIED FROM OLD VERSION}
-
-Our encoding is based on the technique of combining existential types with type classes to implement dynamic dispatch, as described in Section \ref{sec:introduction}. We observe that this basic technique corresponds to an interface in the object-oriented paradigm. It has no state and does not implement any methods, but merely serves as a base type for types which implement the methods described by the type class constraint. Values of such types can be ``cast'' to the base type by wrapping them inside the constructor. Therefore, a notation of subtyping exists on the value level as well as on the type level.
-
-We now show how to expand this technique to a full object system supporting all of the key features of the object-oriented paradigm, with the exception of aliasing. Beginning with encapsulation, we define a single-constructor data type to store the data of each object class. For example, for the $\mathit{MList}$ class shown in Section \ref{sec:usage}, we define the following\footnote{For convention, we use a prefix underscore to indicate that a function is only used internally by the encoding.}:
-\begin{displaymath}
-\begin{array}{lcl}
-\mathbf{data}~\mathit{MListState}~a & = & \mathit{MkMListState}~\{\\
-\multicolumn{3}{l}{\quad \_ \mathit{list} \_ \mathit{root} :: \mathit{Maybe}~(\mathit{MListItem~a}) } \\
-\} &&
-\end{array}
-\end{displaymath}
-This data type is used as parameter for a state monad transformer from Haskell's \texttt{mtl} library\footnote{\url{http://hackage.haskell.org/package/mtl}}. If a class has no parent, as is the case with $\mathit{MList}$, then it is a transformer over the $\mathit{Identity}$ monad. If a class has a parent, such as $\mathit{SList}$, then the $\mathit{Identity}$ monad is replaced with the state monad transformer corresponding to its parent class:
-\begin{displaymath}
-\begin{array}{lcl}
-\mathbf{type}~\mathit{MListM}~a & = & \mathit{StateT}~(\mathit{MListState}~a)~\mathit{Identity} \\
-\mathbf{type}~\mathit{SListM}~a & = & \mathit{StateT}~(\mathit{SListState}~a)~(\mathit{MListM}~a)
-\end{array}
-\end{displaymath}
-State transformers\footnote{Not to be confused with state monad transformers} are functions $s \to (a,s)$ which accept an initial state of type $s$ as argument and return a result of some type $a$ as well as an updated state. The state monad captures this effect and allows state transformers to be ordered so that the updated state of one is given to the next as initial state. The monad transformer version of the state monad, known as state monad transformer, allows state monads to be layered on top of other monads. The resulting monad stacks have all of their monads' effects layered on top of each other. Therefore, a stack of state monad transformers will propagate the state of each layer. Or in other words, the top-most state monad transformer inherits the state of all other state monads in the stack.
-
-Let us note that $\mathit{StateT}~s~(\mathit{StateT}~t~\mathit{Identity})$ is isomorphic to $\mathit{StateT}~(s,t)~\mathit{Identity}$ and either representation could be chosen. However, we prefer the former for simplicity since it allows us to construct the state one layer at a time. This is necessary due to the representation of objects in our system and is discussed in more detail later on in this section. We want to parametrise each state monad transformer with only the state of the corresponding object. Therefore, data types representing the state of sub-classes do not include any fields inherited from their parent(s):
-\begin{displaymath}
-\begin{array}{lcl}
-\mathbf{data}~\mathit{SListState}~a & = & \mathit{MkSListState}~\{ \\
-\multicolumn{3}{l}{\quad \_ slist \_ pred :: a \to a \to \mathit{Bool}}\\
-\} &&
-\end{array}
-\end{displaymath}
-We use a multi-parameter type class together with functional dependencies \cite{jones2000type} to represent the interface of an object class. We can further divide such an interface into two groups of methods. Each method of an object class has a corresponding function in both groups. While all are part of the same type class, one group is used internally by the encoding when the call-site is a method within the same object class. The other group of methods can be called on objects from all other call-sites, such as \emph{e.g.} pure code. They are responsible for unfolding an object into a stack of state monad transformers, invoking the corresponding internal method on the stack, and then folding the updated state back into an object. For example, the following is a partial definition of the type class for $\mathit{MList}$ showing the two methods corresponding to the $\mathit{insert}$ method in the object class:
+A pleasant property of class hierarchies in object-oriented languages is that they are open for extension. In other words, classes do not need to know about other classes which inherit from them. For example, consider the following, abstract base class for an expression language in Java:
 \begin{displaymath}
 \begin{array}{l}
-\mathbf{class}~\mathit{Monad}~m \Rightarrow \mathit{MListLike}~o~s~m~a \mid o \to s, s \to o~\mathbf{where} \\
-\quad \begin{array}{lcl}
-\_\mathit{get}\_\mathit{list}\_\mathit{root} & :: & o~a \to m~(\mathit{Maybe}~(\mathit{MItem~a}), o~a)\\
-\_\mathit{get}\_\mathit{list}\_\mathit{root}' & :: & \mathit{StateT}~(s~a)~m~(\mathit{Maybe}~(\mathit{MItem}~a))\\
-\_ecall\_\mathit{insert} & :: & o~a \to a \to m~((),o~a) \\
-\_icall\_\mathit{insert} & :: & a \to \mathit{StateT}~(s~a)~m~()
-\end{array}
+\mathbf{abstract}~\mathbf{class}~\mathit{Expr}~\{\\
+\qquad \mathbf{public}~\mathbf{abstract}~\mathit{int}~\mathit{eval}();\\
+\}
 \end{array}
 \end{displaymath}
-Each type class belonging to an object class has at least three parameters: $o$ is the type representing objects, $s$ is the data type describing the state, and $m$ is the monad in which methods of this type class can be invoked in. Additionally, there is one type parameter for each type parameter of the object class, which is just $a$ for $\mathit{MList}$. The two functional dependencies $o \to s$ and $s \to o$ say that the object and state types are uniquely determined by each other. In other words, a type class instance for $\mathit{MListLike}$ can be selected by Haskell's type inference based solely on a known $o$ or a known $s$.
+This roughly corresponds to an algebraic data type $\mathit{Expr}$ in Haskell with no constructors. However, while we cannot retrospectively add constructors to a data type in Haskell, we can extend the $\mathit{Expr}$ class in Java:
+\begin{displaymath}
+\begin{array}{l}
+\mathbf{class}~\mathit{Val}~\mathbf{extends}~\mathit{Expr}~\{\\
+\qquad \mathbf{private}~\mathit{int}~\mathit{value};\\\\
+\qquad \mathbf{public}~\mathit{int}~\mathit{eval}()~\{\\
+\qquad \qquad \mathbf{return}~\mathit{this}.\mathit{value};\\
+\qquad \}\\
+\}
+\end{array}
+\end{displaymath}
+The author of the $\mathit{Expr}$ class does not need to know about the $\mathit{Val}$ class and may even compile a library only containing $\mathit{Expr}$, but it can still be extended in other libraries. Our object system from Section \ref{sec:objects} can do the same, but it has one major limitation: there is no support for subtyping that would allow us to \emph{e.g.} cast a $\mathit{DbModel}$ object to a $\mathit{MyDatabase}$ object. To see why this is an important limitation, consider the following sub-class for $\mathit{Expr}$ in Java:
+\begin{displaymath}
+\begin{array}{l}
+\mathbf{class}~\mathit{Add}~\mathbf{extends}~\mathit{Expr}~\{\\
+\qquad \mathbf{private}~\mathit{Expr}~\mathit{left};\\
+\qquad \mathbf{private}~\mathit{Expr}~\mathit{right};\\\\
+\qquad \mathbf{public}~\mathit{int}~\mathit{eval}()~\{\\
+\qquad \qquad \mathbf{return}~\mathit{this}.\mathit{left}.\mathit{eval}() + \mathit{this}.\mathit{right}.\mathit{eval}();\\
+\qquad \}\\
+\}
+\end{array}
+\end{displaymath}
+Without subtyping, the $\mathit{Add}$ class would be useless. There would be no possible values for the $\mathit{left}$ and $\mathit{right}$ fields, since $\mathit{Expr}$ itself is abstract and cannot be instantiated. It is only useful if sub-classes of $\mathit{Expr}$, which can be instantiated, can be used as $\mathit{Expr}$ values. In the remainder of this section, we will show how to modify the encodings for our object system to support \emph{coercive subtyping} in Haskell.
+
+\subsection{Objects as heterogenous zippers}
+
+Objects so far have been represented using what are essentially singly-linked lists of $\Delta$-objects in which the $\Delta$-objects of sub-classes store their parent's $\Delta$-object. This in turn may contain its parent's $\Delta$-object, and so on. This is easy, because sub-classes always know the type of their parent. The inverse, however, is not true. Parental classes do not know what their children are. In order to represent a sub-class object as a value of its parent's type, the definition of the parent's data type must accommodate for all possible sub-classes, without knowing anything about them, except that they have at least the same interface. We can express this on the type-level using existential types. For example, for a base class we might have the following:
+\begin{displaymath}
+\begin{array}{lcl}
+\mathbf{data}~\mathit{Parent} & = & \forall \mathit{sub}~\mathit{st}.\mathit{ParentCtx}~\mathit{sub}~\mathit{st}~(\mathit{StateT}~\mathit{ParentData}~\mathit{Identity}) \Rightarrow \\
+&& \quad\mathit{MkParentStart}~\mathit{ParentData}~\mathit{sub}
+\end{array}
+\end{displaymath}
+The $\mathit{sub}$ type variable, despite the $\forall$, is existentially-quantified. Together with the type class constraint, only types which implement at least the same interface as $\mathit{Parent}$ can be used as arguments to the $\mathit{ParentCtx}$ data constructor. Indeed, this technique is well-known in folklore for 
 
 We combine all of the above to define a data type for objects belonging to an object class. The value representation of an object is reminiscent of a zipper \cite{huet1997zipper}. This data structure is used for the bi-directional traversal of another data structure, such as a list or a tree, and consists of three parts. For \emph{e.g.} a functional list the zipper consists of a list of ancestor elements which have already been traversed, the element which is currently in view, and a list of successor elements which have not been traversed yet. Our encoding of an object is essentially a zipper over a heterogeneous list of partial objects which we will refer to as $\Delta$-objects. A $\Delta$-object contains only the state of the corresponding class.
-
-When an object is constructed, the view of the zipper is placed on the last element in the list -- the $\Delta$-object corresponding to the object class which is being instantiated. Its immediate ancestor is a $\Delta$-object corresponding to its superclass, which in turn may have its superclass as an ancestor, and so on. Such an object can be cast to a superclass by shifting the zipper's view to an ancestor in which case the sub-class becomes a successor element (Figure \ref{fig:cast}). In this case, the type of the $\Delta$-object representing the sub-class is existentially-quantified and we no longer know anything about it, other than that it implements the same type class as the parent. For this reason, the zipper must first be traversed to construct the state of the whole object. it is therefore beneficial to be able to do this in layers using multiple state monad transformers.
-
-\tikzstyle{int}=[draw, minimum size=2em]
-\tikzstyle{init} = [pin edge={thin,gray}]
-
-\begin{figure}
-    \begin{center}
-        \bgroup
-        \def\arraystretch{1.5}
-        \begin{tabular}{ccc}
-            \begin{tikzpicture}[node distance=2.0cm,auto,>=latex']
-            \node [int] (a) {$\mathit{MList}$};
-            \node [int,below=1cm,pin={[init]above:View}] (b) [right of=a] {$\mathit{SList}$};
-            \path[->] (b) edge node {} (a);
-            \end{tikzpicture} & $\qquad \Leftrightarrow \qquad$ &
-            
-            \begin{tikzpicture}[node distance=2.0cm,auto,>=latex']
-            \node [int,pin={[init]above:View}] (c)  {$\mathit{MList}$};
-            \node [int,above=1cm] (d) [right of=c] {$\mathit{SList}$};
-            \path[->] (c) edge node {} (d);
-            \end{tikzpicture} \\
-            $\mathit{SList}$ object & & $\mathit{MList}$ object
-        \end{tabular}
-        \egroup
-    \end{center}
-    \caption{Cast between an $\mathit{SList}$ object and an $\mathit{MList}$ object} \label{fig:cast}
-\end{figure}
 
 Each object class has its own data type used to represent objects. These are tailored to account only for the zipper states that objects of a class can actually be in. For example, the encoding of $\mathit{MList}$ objects is shown below: 
 \begin{displaymath}
@@ -163,6 +134,34 @@ Instantiating new objects requires us to set up the initial zipper configuration
 \}\} &&
 \end{array}
 \end{displaymath}
+
+\subsection{Casting}
+
+When an object is constructed, the view of the zipper is placed on the last element in the list -- the $\Delta$-object corresponding to the object class which is being instantiated. Its immediate ancestor is a $\Delta$-object corresponding to its superclass, which in turn may have its superclass as an ancestor, and so on. Such an object can be cast to a superclass by shifting the zipper's view to an ancestor in which case the sub-class becomes a successor element (Figure \ref{fig:cast}). In this case, the type of the $\Delta$-object representing the sub-class is existentially-quantified and we no longer know anything about it, other than that it implements the same type class as the parent. For this reason, the zipper must first be traversed to construct the state of the whole object. it is therefore beneficial to be able to do this in layers using multiple state monad transformers.
+
+\begin{figure}
+    \begin{center}
+        \bgroup
+        \def\arraystretch{1.5}
+        \begin{tabular}{ccc}
+            \begin{tikzpicture}[node distance=2.0cm,auto,>=latex']
+            \node [int] (a) {$\mathit{MList}$};
+            \node [int,below=1cm,pin={[init]above:View}] (b) [right of=a] {$\mathit{SList}$};
+            \path[->] (b) edge node {} (a);
+            \end{tikzpicture} & $\qquad \Leftrightarrow \qquad$ &
+            
+            \begin{tikzpicture}[node distance=2.0cm,auto,>=latex']
+            \node [int,pin={[init]above:View}] (c)  {$\mathit{MList}$};
+            \node [int,above=1cm] (d) [right of=c] {$\mathit{SList}$};
+            \path[->] (c) edge node {} (d);
+            \end{tikzpicture} \\
+            $\mathit{SList}$ object & & $\mathit{MList}$ object
+        \end{tabular}
+        \egroup
+    \end{center}
+    \caption{Cast between an $\mathit{SList}$ object and an $\mathit{MList}$ object} \label{fig:cast}
+\end{figure}
+
 In order to cast from \emph{e.g.} an $\mathit{SList}$ object to an $\mathit{MList}$ object, the view of the zipper must be shifted as shown previously in Figure \ref{fig:cast}. The implementation of the illustrated cast is given below. This $\mathit{cast}$ function is really part of a type class for which there are instances for every possible cast.
 \begin{displaymath}
 \begin{array}{lcl}
@@ -172,6 +171,8 @@ In order to cast from \emph{e.g.} an $\mathit{SList}$ object to an $\mathit{MLis
 \end{array}
 \end{displaymath}
 Casts in the other direction require a bit more work. Firstly, we need a different casting function whose result is wrapped in $\mathit{Maybe}$ to indicate that a cast from a base-class to a sub-class may not succeed. However, due to the use of existential types, we also require runtime type information about the type of the value in \emph{e.g.} the $\_\mathit{list}\_\mathit{sub}$ field. Haskell's $\mathit{Typeable}$ type class\footnote{\url{https://hackage.haskell.org/package/base/docs/Data-Typeable.html}} may be used for this purpose.
+
+\textbf{COPIED FROM OLD PAPER}
 
 Object types must also be made instances of their corresponding type class, as well as of all type classes belonging to their superclases. For example, part of the $\mathit{MListLike}$ instance for $\mathit{MList}$ is shown below:
 \begin{displaymath}
@@ -262,7 +263,7 @@ The type class constraint on $\_\mathit{list}\_\mathit{invoke}$ ensures that the
 \section{Translation}
 \label{sec:auto}
 
-Encoding object classes for our system by hand is both repetitive and error-prone. We propose syntactic sugar resembling familiar notations used by object-oriented languages to automatically generate the corresponding encodings. Object classes are modelled using $\mathbf{state}$ declarations. The following is an overview of the structure of such a declaration:
+Encoding object classes for our system by hand is both repetitive and error-prone. Luckily, the encoding is also well-suited for auto-generation. In this section, we propose syntactic sugar resembling the usual notation for object classes used by object-oriented languages. The corresponding encodings can automatically be generated from this syntax. Since the $\mathbf{class}$ keyword is already used for type classes in Haskell, object classes use the $\mathbf{state}$ keyword instead. The following is an overview of the structure of a declaration for an object class:
 \begin{displaymath}
 \begin{array}{l}
 [\mathbf{abstract} \mid \mathbf{final}]~\mathbf{state}~\mathit{C}~\overline{\mathit{tyvar}}~[: P~\overline{\mathit{type}}]~\mathbf{where} \\
@@ -271,7 +272,7 @@ Encoding object classes for our system by hand is both repetitive and error-pron
 \quad \overline{\mathit{equation}}
 \end{array}
 \end{displaymath}
-The $\mathbf{state}$ keyword is optionally preceded by either an $\mathbf{abstract}$ or $\mathbf{final}$ modifier, but cannot have both. If the $\mathbf{abstract}$ modifier is specified, the class cannot be instantiated directly, but it may include method typings marked as $\mathbf{abstract}$ which do not have an accompanying binding. Unless a class which inherits from an abstract class is abstract itself, it must implement all of its ancestors' methods which are marked as $\mathbf{abstract}$ and are therefore lacking an implementation. If a class is marked as $\mathbf{final}$, then no other class can inherit from it.
+The $\mathbf{state}$ keyword is optionally preceded by either an $\mathbf{abstract}$ or $\mathbf{final}$ modifier, but cannot have both. If the $\mathbf{abstract}$ modifier is specified, the class cannot be instantiated directly, but it may include method typings marked as $\mathbf{abstract}$ which do not have an accompanying binding. Unless a class which inherits from an abstract class is abstract itself, it must implement all of its ancestors' methods which are marked as $\mathbf{abstract}$ and are therefore lacking an implementation. If a class is marked as $\mathbf{final}$, then no other class can inherit from it. This is accomplished by omitting the data constructors which allow successor $\Delta$-objects as shown in Figure \ref{tab:baseconstructors}.
 
 The name of an object class $C$ follows the conventions for type constructors\footnote{In Haskell, this means that the name must start with an upper-case character.} and is followed by zero or more type variables. The optional $: \mathit{P}~\overline{\mathit{type}}$ component of the header of the declaration is used to specify the class's parent. $P$ must be the name of a non-final object class. There must be as many $\mathit{type}$s as there are type parameters in $P$'s definition. Any type variables used here must first be declared as type parameters of $C$.
 

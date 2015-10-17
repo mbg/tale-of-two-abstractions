@@ -1,73 +1,114 @@
 \section{Template Haskell}
 \label{sec:th}
 
-We have implemented our system in a Haskell library\footnote{\url{https://github.com/mbg/monadic-state-hierarchies}} which primarily provides a $\mathit{QuasiQuoter}$ \citep{mainland2007s} for our object notation. Multiple state declarations may be included in a single quotation and, indeed, this is necessary if multiple state classes depend on each other. The examples in Section \ref{sec:usage} can be used exactly as shown. For example, for $\mathit{MListItem}$ we write:
+We have developed a Haskell library\footnote{\url{https://github.com/mbg/monadic-state-hierarchies} on GitHub and \url{http://hackage.haskell.org/package/msh} on Hackage} which implements the automatic translation from a simple object-oriented language to the encoding shown in Section \ref{sec:auto}. Object classes can be defined inside of a Haskell source file with the help of a Template Haskell $\mathit{QuasiQuoter}$\cite{mainland2007s}. The example for a simple expression language we have shown in Section \ref{sec:encoding} using Java syntax can easily be converted into our state declarations:
 \begin{displaymath}
 \begin{array}{l}
-[\mathit{state}\mid \mathbf{state}~\mathit{MListItem}~a~\mathbf{where} \\
+[\mathit{state}\mid\\\mathbf{abstract}~\mathbf{state}~\mathit{Expr}~\mathbf{where} \\
 \quad \begin{array}{lcl}
-\mathbf{data}~\mathit{val} & :: & a \\
-\mathbf{data}~\mathit{next}  & :: & \mathit{Maybe}~(\mathit{MListItem}~a)
+\mathit{eval} & :: & \mathit{Int}\\
+\end{array}\\\\
+\mathbf{state}~\mathit{Add} : \mathit{Expr}~\mathbf{where} \\
+\quad \begin{array}{lcl}
+\mathbf{data}~\mathit{left} & :: & \mathit{Expr} \\
+\mathbf{data}~\mathit{right}  & :: & \mathit{Expr}
 \end{array}\\\\
 \quad \begin{array}{lcl}
-\mathit{insertAtEnd} & :: & \mathit{MListItem}~a \to ()\\
-\mathit{insertAtEnd}~v & = & \mathbf{do} \\
-\multicolumn{3}{l}{\quad \begin{array}{l}
-\mathit{switch}~\mathit{next}~\$~\lambda case \\
-\quad \begin{array}{lcl}
-\mathit{Nothing} & \to & \mathit{next} <: \mathit{Just}~v  \\
-(\mathit{Just}~n) & \to & \mathbf{do} \\
-\multicolumn{3}{l}{\quad \mathit{next} <: \mathit{Just}~(\mathit{object}~(n.!\mathit{insertAtEnd})~v) }
-\end{array}
-\end{array}}
-\end{array}\\\mid]
+\mathit{eval} & :: & \mathit{Int}\\
+\mathit{eval} & = & \mathbf{do} \\
+\multicolumn{3}{l}{\quad  \begin{array}{lcl}
+x & \leftarrow & \mathit{this}.!\mathit{left}.!\mathit{eval}\\
+y & \leftarrow & \mathit{this}.!\mathit{right}.!\mathit{eval}\\
+\multicolumn{3}{l}{\mathit{return}~(x + y) }
+\end{array}} 
+\end{array}\\
+\mid]
 \end{array}
 \end{displaymath}
-The quotation is parsed and then translated into an abstract representation of Haskell's syntax, according to the rules shown in Section \ref{sec:auto}. Method typings must be given, similar to type classes. We parse them as standard Haskell, but their co-domains will be wrapped into \emph{e.g.} $\mathit{MListItemM}$ in the example above. Method equations are also parsed as standard Haskell, but there is no need to apply any transformations. 
+The quotation is parsed and then translated into an abstract representation of Haskell's syntax, according to the rules shown in Section \ref{sec:auto}. Method typings must be given, similar to type classes. We parse them as standard Haskell, but their co-domains will be wrapped into \emph{e.g.} $\mathit{AddM}$ in the example above. Method equations are also parsed as normal Haskell, but no transformations are applied. The code for this and other examples may be found in our code repository.
 
-In order to allow programmers to work with the object classes, our library contains a number of combinators. Most of these combinators operate on \emph{selectors} which are defined as:
-\begin{displaymath}
-\begin{array}{lcl}
-\mathbf{data}~\mathit{Selector}~o~s~m~a~b & = & \mathit{MkMethod}~\{ \\
-\multicolumn{3}{l}{\quad \begin{array}{lcl}
-\mathit{mInternal} & :: & \mathit{a} \to \mathit{StateT}~s~m~b, \\
-\mathit{mExternal} & :: & o \to a \to m~(b,o)
-\end{array}} \\
-\multicolumn{3}{l}{\} \mid \mathit{MkField}~\{} \\
-\multicolumn{3}{l}{\quad \begin{array}{lcl}
-\mathit{fExGet} & :: & o \to m~(b,o), \\
-\mathit{fInGet} & :: & \mathit{StateT}~s~m~b, \\
-\mathit{fExSet} & :: & o \to a \to m~((),o), \\
-\mathit{fInSet} & :: & a \to \mathit{StateT}~s~m~b
-\end{array}} \\
-\multicolumn{3}{l}{\} \mid \mathit{MkCall}~\{} \\
-\multicolumn{3}{l}{\quad \begin{array}{lcl}
-\mathit{cCall} & :: & a \to (b,o)
-\end{array}} \\
-\}
-\end{array}
-\end{displaymath}
-Intuitively, a selector is a record of all functions belonging to a field or method. The $\mathit{MkCall}$ constructor is used to represent selectors which have been applied to an object. For convenience, we define a type alias for fields since their argument and return types will always be the same:
-\begin{displaymath}
-\begin{array}{lcl}
-\mathbf{type}~\mathit{Field}~o~s~m~a & = & \mathit{Selector}~o~s~m~a~a
-\end{array}
-\end{displaymath}
-We enrich the type classes that are generated for object classes with selectors for all fields and methods, using the original names from the state declaration. For example, $\mathit{MListItemLike}$ contains
+\subsection{Selectors}
+
+In order to allow programmers to work with the object classes, our library contains a number of combinators. Most of these combinators operate on \emph{selectors} which are defined using a GADT and are indexed over whether they represent a mutable member, \emph{i.e.} a field, or an immutable member, \emph{i.e.} a method. The $\mathit{MemberType}$ type is promoted to the kind level and the $\mathit{Mutable}$ and $\mathit{Immutable}$ constructors are used as types:
 \begin{displaymath}
 \begin{array}{l}
-\mathit{val} :: \mathit{MListItemLike}~o~s~m~a \Rightarrow \\
-\qquad \mathit{Field}~(o~a)~(s~a)~m~a \\
-\mathit{next} ::  \mathit{MListItemLike}~o~s~m~a \Rightarrow \\
-\qquad  \mathit{Field}~(o~a)~(s~a)~m~(\mathit{Maybe}~(\mathit{MListItem}~a))\\
-\mathit{insertAtEnd} ::  \mathit{MListItemLike}~o~s~m~a \Rightarrow \\
-\qquad  \mathit{Selector}~(o~a)~(s~a)~m~(\mathit{MListItem}~a)~()\\
+\mathbf{data}~\mathit{MemberType} = \mathit{Mutable} \mid \mathit{Immutable} \\\\
+\mathbf{data}~\mathit{Selector}~(\mathit{ty} :: \mathit{MemberType})~o~s~m~a~\mathbf{where} \\
+\quad \begin{array}{lcl}
+ \mathit{MkMethod} & :: & \mathit{StateT}~s~m~a \to \\
+                   &    & (o \to m~(a, o)) \to\\
+                   &    & \mathit{Selector}~\mathit{Immutable}~o~s~m~a \\
+\mathit{MkField}   & :: & (o \to m (a,o)) \to \\
+                   &    & \mathit{StateT}~s~m~a \to \\
+                   &    & (o \to a \to m~((),o)) \to \\
+                   &    & (a \to \mathit{StateT}~s~m~()) \to \\
+                   &    & \mathit{Selector}~\mathit{Mutable}~o~s~m~a
+\end{array}
 \end{array}
 \end{displaymath}
-in addition to the type class methods shown in Section \ref{sec:auto}. This allows us to use the field and method names directly in any context without any compile-time transformations which resolve them to the appropriate functions. For example, in the instance for $\mathit{MListItem}$, $\mathit{next}$ has the following value:
+Intuitively, a selector is a value which contains both, internal and external, versions of a member so that the same name can be used for both. For fields, it contains both versions for the getter and the setter. 
+The type classes which are generated for object classes contain selectors for all of their members, using the original names from the state declaration. For example, including inherited members and in addition to the type class methods shown in Section \ref{sec:auto}, the $\mathit{Add}$ object class contains:
 \begin{displaymath}
-\mathit{next} = \mathit{MkField} \mathit{\_get\_next} \mathit{\_get\_next}' \mathit{\_set\_next} \mathit{\_set\_next}'
+\begin{array}{l}
+\mathit{left} :: \mathit{AddLike}~o~s~m \Rightarrow \\
+\qquad \mathit{Selector}~\mathit{Mutable}~o~s~m~\mathit{Expr} \\
+\mathit{right} :: \mathit{AddLike}~o~s~m \Rightarrow \\
+\qquad \mathit{Selector}~\mathit{Mutable}~o~s~m~\mathit{Expr} \\
+\mathit{eval} :: \mathit{EvalLike}~o~s~m \Rightarrow \\
+\qquad \mathit{Selector}~\mathit{Immutable}~o~s~m~\mathit{Int} \\
+\end{array}
 \end{displaymath}
+Selectors allow us to use member names directly in either an internal or external call context without any compile-time transformations which resolve them to the appropriate functions. For example, in the type class instance for $\mathit{Add}$, $\mathit{left}$ has the following value:
+\begin{displaymath}
+\mathit{left} = \mathit{MkField}~\mathit{\_ext\_get\_next}~\mathit{\_int\_get\_next}~\mathit{\_ext\_set\_next}~\mathit{\_int\_set\_next}
+\end{displaymath}
+
+\subsection{Selector composition}
+
+In object-oriented languages, members can be chained together using the $.$ ``operator''.
+
+\begin{displaymath}
+\begin{array}{l}
+\mathbf{infixr}~8~.!\\
+\mathbf{class}~\mathit{Monad}~m \Rightarrow \mathit{Object}~\mathit{obj}~\mathit{st}~m~\mathit{where} \\
+\qquad \begin{array}{lcl}
+\mathit{this} & :: & \mathit{This}~\mathit{obj}~\mathit{st}~\mathit{m}~\mathit{obj} \\
+\mathit{this} & = & \mathit{MkThis} \\\\
+
+(.!) & :: & \forall r~\mathit{ty}.\\ 
+     &    & \mathit{obj} \to \\
+     &    & \mathit{Selector}~\mathit{ty}~(\mathit{QueryObject}~\mathit{obj})~\mathit{st}~(\mathit{QueryMonad}~\mathit{obj}~\mathit{m})~r \to  \\
+     &    & \mathit{QueryResult}~\mathit{obj}~\mathit{ty}~\mathit{st}~m~r
+\end{array}
+\end{array}
+\end{displaymath}
+
+The type of selector we obtain from composing two selectors is determined by a closed type function:
+\begin{displaymath}
+\begin{array}{l}
+\mathbf{type}~\mathbf{family}~\mathit{MemberComposeResult} \\
+\quad (\mathit{lhs} :: \mathit{MemberType})~(\mathit{rhs} :: \mathit{MemberType} :: \mathit{MemberType})~\mathbf{where} \\\\
+\qquad \begin{array}{lcl}
+\mathit{MemberComposeResult}~\mathit{Immutable}~\mathit{Immutable} & = & \mathit{Immutable} \\
+\mathit{MemberComposeResult}~\mathit{Immutable}~\mathit{Mutable} & = & \mathit{Immutable} \\
+\mathit{MemberComposeResult}~\mathit{Mutable}~\mathit{Immutable} & = & \mathit{Immutable} \\
+\mathit{MemberComposeResult}~\mathit{Mutable}~\mathit{Mutable} & = & \mathit{Mutable} 
+\end{array}
+\end{array}
+\end{displaymath}
+
+In most object-oriented languages, $\mathit{null}$ is automatically a value of all reference types. Members of a field or variable can be accessed without checking whether the value is $\mathit{null}$ or not, frequently leading to runtime errors which are difficult to track down. Functional languages, such as ML or Haskell, do not have $\mathit{null}$ values -- they have a better solution: the option type. In Haskell, this type is called $\mathit{Maybe}$ and is defined as:
+\begin{displaymath}
+\begin{array}{lcl}
+\mathbf{data}~\mathit{Maybe}~a & = & \mathit{Nothing} \mid \mathit{Just}~a
+\end{array}
+\end{displaymath}
+In other words, a value of type $\mathit{Maybe}~a$ is either $\mathit{Nothing}$ -- the rough equivalent of $\mathit{null}$ -- or $\mathit{Just}~x$ for some $x :: a$. Case analysis must be performed on every such value to determine whether it contains a value of type $a$ or not. Functions expecting an argument of type $a$ cannot be applied to a value of type $\mathit{Maybe}~a$. Object-oriented languages have recently begun to adapt this type as a type-safe alternative in favour of $\mathit{null}$. However, checking whether a value is $\mathit{Nothing}$ or not can still be tedious. 
+
+A second composition operator
+
+\subsection{Combinators}
+
 When used in \emph{e.g.} the $<:$ operator, the appropriate setter is extracted from the record and applied to the new value for the field:
 \begin{displaymath}
 \begin{array}{l}
