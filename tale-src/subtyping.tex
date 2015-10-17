@@ -9,7 +9,7 @@ A pleasant property of class hierarchies in object-oriented languages is that th
 \}
 \end{array}
 \end{displaymath}
-This roughly corresponds to an algebraic data type $\mathit{Expr}$ in Haskell with no constructors. However, while we cannot retrospectively add constructors to a data type in Haskell, we can extend the $\mathit{Expr}$ class in Java:
+This roughly corresponds to an algebraic data type $\mathit{Expr}$ in Haskell with no constructors and a function $\mathit{eval} :: \mathit{Expr} \to \mathit{Int}$. However, while we cannot retrospectively add constructors to a data type in Haskell, we can extend the $\mathit{Expr}$ class in Java:
 \begin{displaymath}
 \begin{array}{l}
 \mathbf{class}~\mathit{Val}~\mathbf{extends}~\mathit{Expr}~\{\\
@@ -20,7 +20,7 @@ This roughly corresponds to an algebraic data type $\mathit{Expr}$ in Haskell wi
 \}
 \end{array}
 \end{displaymath}
-The author of the $\mathit{Expr}$ class does not need to know about the $\mathit{Val}$ class and may even compile a library only containing $\mathit{Expr}$, but it can still be extended in other libraries. Our object system from Section \ref{sec:objects} can do the same, but it has one major limitation: there is no support for subtyping that would allow us to \emph{e.g.} cast a $\mathit{DbModel}$ object to a $\mathit{MyDatabase}$ object. To see why this is an important limitation, consider the following sub-class for $\mathit{Expr}$ in Java:
+The author of the $\mathit{Expr}$ class does not need to know about the $\mathit{Val}$ class and may even compile a library only containing $\mathit{Expr}$. The class can still be extended in other libraries by other authors, however. Our object system from Section \ref{sec:objects} allows for the same, but it has one major limitation: there is no support for subtyping that would allow us to \emph{e.g.} cast a $\mathit{DbModel}$ object to a $\mathit{MyDatabase}$ object. To see why this is an important limitation, consider the following sub-class for $\mathit{Expr}$ in Java:
 \begin{displaymath}
 \begin{array}{l}
 \mathbf{class}~\mathit{Add}~\mathbf{extends}~\mathit{Expr}~\{\\
@@ -43,27 +43,25 @@ Objects so far have been represented using what are essentially singly-linked li
 && \quad\mathit{MkParentStart}~\mathit{ParentData}~\mathit{sub}
 \end{array}
 \end{displaymath}
-The $\mathit{sub}$ type variable, despite the $\forall$, is existentially-quantified. Together with the type class constraint, only types which implement at least the same interface as $\mathit{Parent}$ can be used as arguments to the $\mathit{ParentCtx}$ data constructor. Indeed, this technique is well-known in folklore for 
+The $\mathit{sub}$ type variable, despite the $\forall$, is existentially-quantified. Together with the type class constraint, only types which implement at least the same interface as $\mathit{Parent}$ can be used as arguments to the $\mathit{ParentCtx}$ data constructor. Indeed, this technique is well-known in folklore for enabling dynamic dispatch, although it is considered an anti-pattern. However, we combine it with our previous representation for objects to encode coercive subtyping in Haskell. The resulting representation of objects is reminiscent of a zipper\cite{huet1997zipper}. This data structure is used for the bi-directional traversal of another data structure, such as a list or a tree, and consists of three parts. For \emph{e.g.} a functional list, its zipper consists of a list of ancestor elements which have already been traversed, the element which is currently in \emph{view}, and a list of successor elements which have not yet been traversed. Our encoding of an object is essentially a zipper over a heterogeneous list of $\Delta$-objects. 
 
-We combine all of the above to define a data type for objects belonging to an object class. The value representation of an object is reminiscent of a zipper \cite{huet1997zipper}. This data structure is used for the bi-directional traversal of another data structure, such as a list or a tree, and consists of three parts. For \emph{e.g.} a functional list the zipper consists of a list of ancestor elements which have already been traversed, the element which is currently in view, and a list of successor elements which have not been traversed yet. Our encoding of an object is essentially a zipper over a heterogeneous list of partial objects which we will refer to as $\Delta$-objects. A $\Delta$-object contains only the state of the corresponding class.
-
-Each object class has its own data type used to represent objects. These are tailored to account only for the zipper states that objects of a class can actually be in. For example, the encoding of $\mathit{MList}$ objects is shown below: 
+Each object class still has its own data type used to represent objects. These are now tailored to account only for the zipper states that objects of a class can actually be in. For example, the encoding of $\mathit{MyDatabase}$ objects is shown below: 
 \begin{displaymath}
 \begin{array}{lcl}
-\mathbf{data}~\mathit{MList}~a & = & \mathit{MListData}~\{ \\ 
-\multicolumn{3}{l}{\quad \_\mathit{list}\_\mathit{data} :: \mathit{MListState}~a}\\
+\mathbf{data}~\mathit{MyDatabase} & = & \mathit{MyDatabaseData}~\{ \\ 
+\multicolumn{3}{l}{\quad \_\mathit{MyDatabase}\_\mathit{data} :: \mathit{MyDatabaseState}}\\
 \multicolumn{3}{l}{\begin{array}{lcl}
-    \} & \mid & \forall s~d.\mathit{MListLike}~s~d~(\mathit{MListM}~a)~a \Rightarrow \\
-    & &  \mathit{MListStart}~\{
+    \} & \mid & \forall s~d.\mathit{MyDatabaseLike}~s~d~\mathit{MyDatabaseM} \Rightarrow \\
+    & &  \mathit{MyDatabaseStart}~\{
     \end{array}}  \\
 \multicolumn{3}{l}{\begin{array}{lcl}
-    \_\mathit{list}\_\mathit{data} & :: & \mathit{MListState}~a,\\
-    \_\mathit{list}\_\mathit{sub}  & :: & s~a
+    \_\mathit{MyDatabase}\_\mathit{data} & :: & \mathit{MyDatabaseState},\\
+    \_\mathit{MyDatabase}\_\mathit{sub}  & :: & s
     \end{array}}\\
 \} &&
 \end{array}
 \end{displaymath}
-An $\mathit{MList}$ object has two possible states: either it is an instance of $\mathit{MList}$ or it is an instance of a sub-class of $\mathit{MList}$ which has been cast to $\mathit{MList}$. The $\mathit{MListData}$ and $\mathit{MListStart}$ constructors represent these cases respectively if this $\Delta$-object is in the view. If it is not, then the $\mathit{MListData}$ constructor may also be used to represent an ancestor to another $\Delta$-object. Figure \ref{tab:baseconstructors} shows how class attributes affect which constructors are required.
+A $\mathit{MyDatabase}$ object has two possible states: either it is an instance of $\mathit{MyDatabase}$ or it is an instance of a sub-class of $\mathit{MyDatabase}$ which has been cast to $\mathit{MyDatabase}$. The $\mathit{MyDatabaseData}$ and $\mathit{MyDatabaseStart}$ constructors represent these cases respectively, if this $\Delta$-object is in the view. If it is not, then the $\mathit{MyDatabaseData}$ constructor may also be used to represent an ancestor to another $\Delta$-object. Figure \ref{tab:baseconstructors} shows how class attributes affect which constructors are required.
 \begin{figure}
     \begin{center}
         \begin{tabular}{|c|c|c|c|}
@@ -85,59 +83,58 @@ An $\mathit{MList}$ object has two possible states: either it is an instance of 
     \label{tab:baseconstructors}
 \end{figure}
 
-Subclasses have more possible states because, unlike base class objects, they may have ancestors. For illustration, the encoding of $\mathit{SList}$ objects is given below:
+Sub-class objects have more possible states because, unlike base class objects, they may have ancestors. For illustration, the encoding of $\mathit{DbModel}$ objects is given below:
 \begin{displaymath}
 \begin{array}{lcl}
-\mathbf{data}~\mathit{SList}~a & = & \mathit{SListData}~\{ \\ 
-\multicolumn{3}{l}{\quad \_\mathit{list}\_\mathit{data} :: \mathit{SListState}~a}\\
+\mathbf{data}~\mathit{DbModelObj} & = & \mathit{DbModelData}~\{ \\ 
+\multicolumn{3}{l}{\quad \_\mathit{DbModel}\_\mathit{data} :: \mathit{Map}~\mathit{Int}~\mathit{Recipe}}\\
 \multicolumn{3}{l}{\begin{array}{lcl}
-    \} & \mid & \forall s~d.\mathit{SListLike}~s~d~(\mathit{SListM}~a)~a \Rightarrow \\
-    & &  \mathit{SListStart}~\{
+    \} & \mid & \forall s~d.\mathit{DbModelLike}~s~d~\mathit{DbModel} \Rightarrow \\
+    & &  \mathit{DbModelStart}~\{
     \end{array}}  \\
 \multicolumn{3}{l}{\quad \begin{array}{lcl}
-    \_\mathit{list}\_\mathit{data} & :: & \mathit{SListState}~a,\\
-    \_\mathit{list}\_\mathit{sub}  & :: & s~a
+    \_\mathit{DbModel}\_\mathit{data} & :: & \mathit{Map}~\mathit{Int}~\mathit{Recipe},\\
+    \_\mathit{DbModel}\_\mathit{sub}  & :: & s
     \end{array}}\\
 \multicolumn{3}{l}{ \begin{array}{lcl}
-    \} & \mid & \mathit{SListEnd}~\{ 
+    \} & \mid & \mathit{DbModelEnd}~\{ 
     \end{array}}  \\
 \multicolumn{3}{l}{\quad \begin{array}{lcl}
-    \_\mathit{slist}\_\mathit{sup}  & :: & \mathit{MList}~a, \\
-    \_\mathit{slist}\_\mathit{data} & :: & \mathit{SListState}~a
+    \_\mathit{DbModel}\_\mathit{sup}  & :: & \mathit{MyDatabase}, \\
+    \_\mathit{DbModel}\_\mathit{data} & :: & \mathit{Map}~\mathit{Int}~\mathit{Recipe}
     \end{array}}\\
 \multicolumn{3}{l}{ \begin{array}{lcl}
-    \} & \mid & \forall s~d.\mathit{SListLike}~s~d~(\mathit{SListM}~a)~a \Rightarrow \\
-    & &  \mathit{SListMiddle}~\{
+    \} & \mid & \forall s~d.\mathit{DbModelLike}~s~d~\mathit{DbModel} \Rightarrow \\
+    & &  \mathit{DbModelMiddle}~\{
     \end{array}}  \\
 \multicolumn{3}{l}{ \quad \begin{array}{lcl}
-    \_\mathit{slist}\_\mathit{sup}  & :: & \mathit{MList}~a, \\
-    \_\mathit{slist}\_\mathit{data} & :: & \mathit{SListState}~a, \\
-    \_\mathit{slist}\_\mathit{sub}  & :: & s~a
+    \_\mathit{DbModel}\_\mathit{sup}  & :: & \mathit{MyDatabase}, \\
+    \_\mathit{DbModel}\_\mathit{data} & :: & \mathit{Map}~\mathit{Int}~\mathit{Recipe}, \\
+    \_\mathit{DbModel}\_\mathit{sub}  & :: & s
     \end{array}}\\
 \} &&
 \end{array}
 \end{displaymath}
 
-$\mathit{SList}$ is a sub-class that is neither abstract nor final. However, like $\mathit{MList}$, it can only be in one of two possible states while it is in view. If it is an instance of $\mathit{SList}$, then it will have an ancestor no successors which is represented by the $\mathit{SListEnd}$ constructor. If it is an instance of a sub-class of $\mathit{SList}$, then it does additionally have successors and the $\mathit{SListMiddle}$ constructor is used. Depending on whether a $\Delta$-object of this type is an instance of $\mathit{SList}$ or a sub-class, $\mathit{SListData}$ or $\mathit{SListStart}$ are used to represent it as a successor, respectively.
+$\mathit{DbModel}$ is a sub-class that is neither abstract nor final. However, like $\mathit{MyDatabase}$, it can only be in one of two possible states while it is in view. If it is an instance of $\mathit{DbModel}$, then it will have an ancestor but no successors, which is represented by the $\mathit{DbModelEnd}$ constructor. If it is an instance of a sub-class of $\mathit{DbModel}$, then it does additionally have successors and the $\mathit{DbModelMiddle}$ constructor is used. Depending on whether a $\Delta$-object of this type is an instance of $\mathit{DbModel}$ or a sub-class, $\mathit{DbModelData}$ or $\mathit{DbModelStart}$ are used to represent it as a successor, respectively.
 
-Instantiating new objects requires us to set up the initial zipper configuration. This is implemented in the $\mathit{new}$ function, which is a member of a type class so it can be overloaded for every type of object (Section \ref{sec:th}). For example, to do this for $\mathit{SList}$ objects we have:
+Instantiating new objects requires us to set up the initial zipper configuration. This is implemented in the $\mathit{new}$ function, which is a member of a type class so it can be overloaded for every non-abstract class (Section \ref{sec:th}). For example, to do this for $\mathit{DbModel}$ objects we have:
 \begin{displaymath}
 \begin{array}{lcl}
-\mathit{new} & :: & (\mathit{Maybe}~(\mathit{MListItem}~a), (a \to a \to \mathit{Bool})) \to \\
-&&\mathit{SList}~a \\
-\mathit{new}~r~p & = & \mathit{SListEnd}~\{ \\
+\mathit{new} & :: & (\mathit{SqlDatabase}, \mathit{Map}~\mathit{Int}~\mathit{Recipe}) \to 
+\mathit{DbModelObj} \\
+\mathit{new}~(v0,v1) & = & \mathit{DbModelEnd}~\{ \\
 \multicolumn{3}{l}{\quad \begin{array}{lcl}
-    \_\mathit{slist}\_\mathit{sup} & = & \mathit{new}~r, \\
-    \_\mathit{slist}\_\mathit{data} & = & \mathit{MkSListState}~\{\\
-    \multicolumn{3}{l}{\quad \_\mathit{slist}\_\mathit{pred} = p}\\ 
+    \_\mathit{DbModel}\_\mathit{sup} & = & \mathit{new}~v0, \\
+    \_\mathit{DbModel}\_\mathit{data} & = & v1
     \end{array}} \\
-\}\} &&
+    \}&&
 \end{array}
 \end{displaymath}
 
 \subsection{Casting}
 
-When an object is constructed, the view of the zipper is placed on the last element in the list -- the $\Delta$-object corresponding to the object class which is being instantiated. Its immediate ancestor is a $\Delta$-object corresponding to its superclass, which in turn may have its superclass as an ancestor, and so on. Such an object can be cast to a superclass by shifting the zipper's view to an ancestor in which case the sub-class becomes a successor element (Figure \ref{fig:cast}). In this case, the type of the $\Delta$-object representing the sub-class is existentially-quantified and we no longer know anything about it, other than that it implements the same type class as the parent. For this reason, the zipper must first be traversed to construct the state of the whole object. it is therefore beneficial to be able to do this in layers using multiple state monad transformers.
+When an object is constructed, the view of the zipper is placed on the last element in the list -- the $\Delta$-object corresponding to the object class which is being instantiated. Its immediate ancestor is a $\Delta$-object corresponding to its superclass, which in turn may have its superclass as an ancestor, and so on. Such an object can be cast to a superclass by shifting the zipper's view to an ancestor, in which case the sub-class becomes a successor element (Figure \ref{fig:cast}). In this case, the type of the $\Delta$-object representing the sub-class is existentially-quantified and we no longer know anything about it, other than that it implements the same type class as the parent. For this reason, the zipper must first be traversed to construct the state of the whole object. it is therefore beneficial to be able to do this in layers using multiple state monad transformers.
 
 \begin{figure}
     \begin{center}
@@ -145,120 +142,32 @@ When an object is constructed, the view of the zipper is placed on the last elem
         \def\arraystretch{1.5}
         \begin{tabular}{ccc}
             \begin{tikzpicture}[node distance=2.0cm,auto,>=latex']
-            \node [int] (a) {$\mathit{MList}$};
-            \node [int,below=1cm,pin={[init]above:View}] (b) [right of=a] {$\mathit{SList}$};
+            \node [int] (a) {$\mathit{MyDatabase}$};
+            \node [int,below=1cm,pin={[init]above:View}] (b) [right of=a] {$\mathit{DbModel}$};
             \path[->] (b) edge node {} (a);
             \end{tikzpicture} & $\qquad \Leftrightarrow \qquad$ &
             
             \begin{tikzpicture}[node distance=2.0cm,auto,>=latex']
-            \node [int,pin={[init]above:View}] (c)  {$\mathit{MList}$};
-            \node [int,above=1cm] (d) [right of=c] {$\mathit{SList}$};
+            \node [int,pin={[init]above:View}] (c)  {$\mathit{MyDatabase}$};
+            \node [int,above=1cm] (d) [right of=c] {$\mathit{DbModel}$};
             \path[->] (c) edge node {} (d);
             \end{tikzpicture} \\
-            $\mathit{SList}$ object & & $\mathit{MList}$ object
+            $\mathit{DbModel}$ object & & $\mathit{MyDatabase}$ object
         \end{tabular}
         \egroup
     \end{center}
-    \caption{Cast between an $\mathit{SList}$ object and an $\mathit{MList}$ object} \label{fig:cast}
+    \caption{Cast between an $\mathit{DbModel}$ object and an $\mathit{MyDatabase}$ object} \label{fig:cast}
 \end{figure}
 
-In order to cast from \emph{e.g.} an $\mathit{SList}$ object to an $\mathit{MList}$ object, the view of the zipper must be shifted as shown previously in Figure \ref{fig:cast}. The implementation of the illustrated cast is given below. This $\mathit{cast}$ function is really part of a type class for which there are instances for every possible cast.
+The implementation of the illustrated cast is given below. This $\mathit{cast}$ function is part of a type class for which there are instances for every pair of sub-class and ancestor.
 \begin{displaymath}
 \begin{array}{lcl}
-\multicolumn{3}{l}{\mathit{cast} :: \mathit{SList}~a \to \mathit{MList}~a} \\
-\mathit{cast}~(\mathit{SListEnd}~(\mathit{MListData}~\mathit{pd})~\mathit{d}) & = & \\ \multicolumn{3}{l}{\quad \mathit{MListStart}~\mathit{pd}~(\mathit{SListData}~d)} \\
-\mathit{cast}~(\mathit{SListMiddle}~(\mathit{MListData}~\mathit{pd})~\mathit{d}~\mathit{sub}) & = & \\ \multicolumn{3}{l}{\quad \mathit{MListStart}~\mathit{pd}~(\mathit{SListStart}~d~\mathit{sub})}
+\multicolumn{3}{l}{\mathit{cast} :: \mathit{DbModelObj} \to \mathit{MyDatabaseObj}} \\
+\mathit{cast}~(\mathit{DbModelEnd}~(\mathit{MyDatabaseData}~\mathit{pd})~\mathit{d}) & = & \\ \multicolumn{3}{l}{\quad \mathit{MyDatabaseStart}~\mathit{pd}~(\mathit{DbModelData}~d)} \\
+\mathit{cast}~(\mathit{DbModelMiddle}~(\mathit{MyDatabaseData}~\mathit{pd})~\mathit{d}~\mathit{sub}) & = & \\ \multicolumn{3}{l}{\quad \mathit{MyDatabaseStart}~\mathit{pd}~(\mathit{DbModelStart}~d~\mathit{sub})}
 \end{array}
 \end{displaymath}
-Casts in the other direction require a bit more work. Firstly, we need a different casting function whose result is wrapped in $\mathit{Maybe}$ to indicate that a cast from a base-class to a sub-class may not succeed. However, due to the use of existential types, we also require runtime type information about the type of the value in \emph{e.g.} the $\_\mathit{list}\_\mathit{sub}$ field. Haskell's $\mathit{Typeable}$ type class\footnote{\url{https://hackage.haskell.org/package/base/docs/Data-Typeable.html}} may be used for this purpose.
-
-\textbf{COPIED FROM OLD PAPER}
-
-Object types must also be made instances of their corresponding type class, as well as of all type classes belonging to their superclases. For example, part of the $\mathit{MListLike}$ instance for $\mathit{MList}$ is shown below:
-\begin{displaymath}
-\begin{array}{l}
-\mathbf{instance}~\mathit{MListLike}~\mathit{MList}~\mathit{MListState}~\mathit{Identity}~a~\mathbf{where} \\
-\quad \begin{array}{lcl}
-\mathit{insert}~(\mathit{MListData}~d)~v & = & \mathbf{do} \\
-\multicolumn{3}{l}{\quad \begin{array}{lcl}
-    (r,d') & \leftarrow & \mathit{runStateT}~(\_\mathit{insert}~v)~d \\
-    \multicolumn{3}{l}{\mathit{return}~(r,\mathit{MListData}~d')}
-    \end{array}} \\
-\mathit{insert}~(\mathit{MListStart}~d~s)~v & = & \mathbf{do} \\
-\multicolumn{3}{l}{\quad \begin{array}{lcl}
-    ((r,s'),d') & \leftarrow & \mathit{runStateT}~(\mathit{insert}~s~v)~d \\
-    \multicolumn{3}{l}{\mathit{return}~(r,\mathit{MListStart}~d'~s')}
-    \end{array}} \\
-\_\mathit{insert} & = & \mathit{list}\_\mathit{insert}
-\end{array}
-\end{array}
-\end{displaymath}
-The $\mathit{insert}$ method implements part of the dynamic dispatch mechanism. It inspects the state of the object it is called on and calls $\mathit{MList}$'s implementation of $\mathit{insert}$ if it is an instance of $\mathit{MList}$ by setting up a state monad transformer with the object's current state and invoking $\_\mathit{insert}$ in it, before returning an updated object with the resulting state. If if it an instance of some sub-class, then $\mathit{insert}$ still sets up the state monad transformer, but calls the sub-classes' implementation of $\mathit{insert}$ instead. Unless overriden, getters and setters which are inherited from another class are not executed in the child's monad stack since they would be incompatible with it, but are instead $\mathit{lift}$ed to the parent's. This hides the boilerplate normally required for monad transformers.
-
-For example, $\mathit{SList}$ inherits the $\mathit{root}$ field from $\mathit{MList}$. The $\mathit{MListLike}$ instance for $\mathit{MList}$ will have a definition:
-\begin{displaymath}
-\begin{array}{lcl}
-\mathit{\_get\_list\_root'} & = & \mathit{gets}~\mathit{\_list\_root}
-\end{array}
-\end{displaymath}
-Meanwhile, in the $\mathit{MListLike}$ instance for $\mathit{SList}$, we have:
-\begin{displaymath}
-\begin{array}{lcl}
-\mathit{\_get\_list\_root'} & = & \mathit{lift}~\mathit{\_get\_list\_root'}
-\end{array}
-\end{displaymath}
-Calling a method on an object sets up a stack of state monad transformers parametrised over each $\Delta$-object's state. If the object has the type of a base class, this stack can be set up in order by the dynamic dispatch mechanism. If an object has the type of a sub-class, its value representation will reflect this by having the $\Delta$-object corresponding to the sub-class in view. However, all methods of a sub-class require an appropriate monad stack to be set-up before they can be called and cannot be called directly from elsewhere.
-
-Figure \ref{fig:subinvoke} shows the process by which our encoding removes this limitation. When a method is invoked on a sub-class object, the call gets forwarded to along the ancestors of the zipper to until it reaches the base class using a function named $C\_\mathit{invoke}$ for a class named $C$. The definition of this function is given later in this section. Once the base class object has been reached, it can then construct the monad stack from the bottom up as if a method was called on the base class object itself.
-
-\begin{figure}
-    \begin{center}
-        \begin{tikzpicture}[node distance=5.0cm,auto,>=latex']
-        \node [int] (c)  {$\mathit{MList}$};
-        \node [int,pin={[init]above:View}] (d) [right of=c] {$\mathit{SList}$};
-        \node (b) [below of=d,node distance=1cm, coordinate] {a};
-        
-        \path[->] ([yshift=1ex]c.east) edge node {$\mathit{runStateT~insert}$} ([yshift=1ex]d.west);
-        \path[->] ([yshift=-1ex]d.west) edge node {$\mathit{list}\_\mathit{invoke}~\mathit{insert}$} ([yshift=-1ex]c.east);
-        \path[->] (b.north) edge node [right] {$\mathit{obj.insert}$} (d.south);
-        \end{tikzpicture} 
-    \end{center}
-    \caption{Invoking $\mathit{insert}$ on an $\mathit{SList}$ object $\mathit{obj}$} \label{fig:subinvoke}
-\end{figure}
-
-This process requires a second instance of the type class belonging to a sub-class where the underlying monad is the $\mathit{Identity}$ monad as opposed to the parent class's state monad. Methods in such an instance call their parents $\mathit{invoke}$ function with themselves as argument. For example, the type and implementation of $\mathit{MList}$'s $\mathit{invoke}$ function is shown below:
-\begin{displaymath}
-\begin{array}{l}
-\mathbf{class}~\mathit{Monad}~m \Rightarrow \mathit{MListLike}~o~s~m~a \mid o \to s, s \to o~\mathbf{where} \\
-\quad \begin{array}{lcl}
-\_\mathit{list}\_\mathit{invoke} & :: & \mathit{MListLike}~o'~d'~(\mathit{StateT}~(s~a)~m)~a \Rightarrow\\
-\multicolumn{3}{l}{\quad o'~a \to (o'~a \to \mathit{StateT}~(s~a)~m~(r,o'~a)) \to} \\
-\multicolumn{3}{l}{\quad o~a \to m~(r,o~a,o'~a)}
-\end{array} \\\\
-\mathbf{instance}~\mathit{MListLike}~\mathit{MList}~\mathit{MListState}~\mathit{Identity}~a~\mathbf{where} \\
-\quad \begin{array}{lcl}
-\_\mathit{list}\_\mathit{invoke}~s~f~(\mathit{MListData}~d) & = & \mathbf{do} \\
-\multicolumn{3}{l}{\quad \begin{array}{lcl}
-    ((r,s'),d') & \leftarrow & \mathit{runStateT}~(f~s)~d \\
-    \multicolumn{3}{l}{\mathit{return}~(r,\mathit{MListData}~d',s')}
-    \end{array}}
-\end{array}
-\end{array}
-\end{displaymath}
-The type class constraint on $\_\mathit{list}\_\mathit{invoke}$ ensures that the sub-class's implementation of $\mathit{MListLike}$ where the underlying monad is $\mathit{MList}$'s state monad is selected. This $\mathit{invoke}$ function is used as shown below:
-\begin{displaymath}
-\begin{array}{l}
-\mathbf{instance}~\mathit{SListLike}~\mathit{SList}~\mathit{SListState}~\mathit{Identity}~a~\mathbf{where} \\
-\quad \begin{array}{lcl}
-\mathit{insert}~(\mathit{SListEnd}~\mathit{sup}~\mathit{d})~v & = & \mathbf{do} \\
-\multicolumn{3}{l}{\quad \begin{array}{lcl}
-    (r,\mathit{sup}',\mathit{SListEnd}~\_~d') & \leftarrow & \\
-    \multicolumn{3}{l}{\quad \_\mathit{list}\_\mathit{invoke}~(\mathit{SListEnd}~\mathit{sup}~d)~\mathit{sup}} \\
-    \multicolumn{3}{l}{\mathit{return}~(r,\mathit{SListEnd}~\mathit{sup}'~d')}
-    \end{array}}
-\end{array}
-\end{array}
-\end{displaymath}
+Casts in the other direction require a bit more work. Firstly, we need a different casting function whose result is wrapped in $\mathit{Maybe}$ to indicate that a cast from a base-class to a sub-class may not succeed. However, due to the use of existential types, we also require runtime type information about the type of the value in \emph{e.g.} the $\_\mathit{MyDatabase}\_\mathit{sub}$ field. Haskell's $\mathit{Typeable}$ type class\footnote{\url{https://hackage.haskell.org/package/base/docs/Data-Typeable.html}} may be used for this purpose.
 
 \section{Translation}
 \label{sec:auto}

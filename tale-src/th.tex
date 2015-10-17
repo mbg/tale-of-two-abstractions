@@ -65,8 +65,7 @@ Selectors allow us to use member names directly in either an internal or externa
 
 \subsection{Selector composition}
 
-In object-oriented languages, members can be chained together using the $.$ ``operator''.
-
+In object-oriented languages, member access can be chained together using the $.$ ``operator''. For example, $\mathit{obj}.\mathit{foo}.\mathit{bar}$ gets the value of a field $\mathit{foo}$ belonging to an object $\mathit{obj}$ and then invokes the $\mathit{bar}$ method on the value of $\mathit{foo}$. We have a similar mechanism in our library. However, since $.$ is already used for function composition, we use $.!$ instead. This operator is part of a type class $\mathit{Object}$, which is added as a super-class constraint to every type class generated for the interface of a base class:
 \begin{displaymath}
 \begin{array}{l}
 \mathbf{infixr}~8~.!\\
@@ -82,6 +81,7 @@ In object-oriented languages, members can be chained together using the $.$ ``op
 \end{array}
 \end{array}
 \end{displaymath}
+Note that the $\mathit{This}$ type is defined as $\mathbf{data}~\mathit{This}~o~s~m~a$ and simply serves to capture the type arguments of instances of the $\mathit{Object}$ type class. The type of $.!$ is highly flexible. The left argument of the operator can be any type that is made an instance of the $\mathit{Object}$ class. Primarily, those are objects as the name would imply, but selectors and $\mathit{This}$ are also instances of $\mathit{Object}$. The right argument is always a selector. We use the $\mathit{QueryObject}$ and $\mathit{QueryMonad}$ type families to determine what object the selector will be accessing and what monad stack it will run on, depending on the left argument of $.!$.
 
 The type of selector we obtain from composing two selectors is determined by a closed type function:
 \begin{displaymath}

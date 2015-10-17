@@ -123,7 +123,7 @@ The type class contains three methods: $\mathit{\_sqlDatabaseCtx\_invoke}$ which
 \\\\
 \mathit{\_int\_runQuery}~\mathit{query} & = & ~\ldots \\
 \mathit{\_ext\_runQuery}~(\mathit{MkMyDatabaseData}~\mathit{d})~v & = & \mathbf{do} \\
-\multicolumn{3}{l}{\qquad (r,d') \leftarrow \mathit{runStateT}~(\mathit{runQuery\_int}~v)~d } \\ 
+\multicolumn{3}{l}{\qquad (r,d') \leftarrow \mathit{runStateT}~(\mathit{\_int\_runQuery}~v)~d } \\ 
 \multicolumn{3}{l}{\qquad \mathit{return}~(r, (\mathit{MkMyDatabaseData}~d')) } 
 \end{array}
 \end{array}
@@ -164,21 +164,35 @@ The $\mathit{DbModel}$ layer in our example has its own type class, for which $\
 \end{array}
 \end{array}
 \end{displaymath}
-
+As mentioned previously, there are two instances for every type class an object implements. The \emph{primary instance} for $\mathit{DbModelObj}$ where $m = \mathit{MyDatabase}$ is shown below. It follows exactly the same structure as the instance of $\mathit{SqlDatabaseCtx}$ for $\mathit{MyDatabaseObj}$:
 \begin{displaymath}
 \begin{array}{l}
 \mathbf{instance}~\mathit{DbModelCtx}~\mathit{DbModelObj}~(\mathit{Map}~\mathit{Int}~\mathit{Recipe})~\mathit{MyDatabase}~\mathbf{where}\\\\
 \qquad \begin{array}{lcl}
-\mathit{\_\mathit{dbModelCtx\_invoke}} & :: & \\
+\mathit{\_\mathit{dbModelCtx\_invoke}} ~\mathit{obj}~f~(\mathit{MkMyDatabaseData}~d) & = & \mathbf{do}\\
+\multicolumn{3}{l}{\qquad \begin{array}{lcl}
+((r, \mathit{obj'}, d')) & \leftarrow & \mathit{runStateT}~(f~\mathit{obj})~d \\
+\multicolumn{3}{l}{\mathit{return}~(r, \mathit{MkMyDatabaseData}~d'), \mathit{obj}'}
+\end{array}}
+\\\\
 \multicolumn{3}{l}{\qquad \mathit{DbModelCtx}~\mathit{obj}'~\mathit{st}'~(\mathit{StateT}~\mathit{st}~\mathit{m}) \Rightarrow}\\
 \multicolumn{3}{l}{\qquad \mathit{obj}' \to (\mathit{obj}' \to \mathit{StateT}~\mathit{st}~m~(r,\mathit{obj}')) \to} \\
 \multicolumn{3}{l}{\qquad \mathit{obj} \to m~(r,\mathit{obj},\mathit{obj}')} \\\\
-\mathit{\_int\_saveChanges} & :: & \mathit{StateT}~\mathit{st}~m~\mathit{()} \\
-\mathit{\_ext\_saveChanges} & :: & \mathit{obj} \to m~(\mathit{()}, \mathit{obj})
+\mathit{\_int\_saveChanges} & = & \mathbf{do} \\
+\multicolumn{3}{l}{\qquad \begin{array}{lcl}
+    m & \leftarrow & \mathit{get} \\
+    \multicolumn{3}{l}{\mathbf{let}} \\
+    \multicolumn{3}{l}{\qquad \mathit{query} = \ldots} \\
+    \multicolumn{3}{l}{\mathit{\_int\_runQuery}~\mathit{query}}\\
+    \multicolumn{3}{l}{\mathit{return}~()}
+\end{array} }\\
+\mathit{\_ext\_saveChanges}~(\mathit{MkDbModelData}~p~d) & = & \mathbf{do} \\
+\multicolumn{3}{l}{\qquad (r,d') \leftarrow \mathit{runStateT}~\mathit{\_int\_saveChanges}~d } \\ 
+\multicolumn{3}{l}{\qquad \mathit{return}~(r, (\mathit{MkMyDatabaseData}~p~d')) } 
 \end{array}
 \end{array}
 \end{displaymath}
-
+The second instance of $\mathit{DbModelCtx}$ for $\mathit{DbModelObj}$, where $m = \mathit{Identity}$ is more interesting, since it implements the behaviour shown in Figure \ref{fig:invoke}.
 % may need a lambda in the recursive invoke call
 
 \begin{displaymath}
